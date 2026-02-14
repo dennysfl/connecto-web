@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Connecto - Login</title>
+    <link rel="stylesheet" href="./src/css/styles.css" />
+</head>
+
+<body>
+    <main class="container">
+        <h1>Connecto</h1>
+
+        <section class="card">
+            <h2>Login</h2>
+
+            <form id="loginForm">
+                <label>Email</label>
+                <input id="email" type="email" required />
+
+                <label>Password</label>
+                <input id="password" type="password" required />
+
+                <button type="submit">Sign in</button>
+            </form>
+
+            <p id="msg" class="msg"></p>
+        </section>
+
+        <section class="card">
+            <h2>Create Account</h2>
+
+            <form id="newAccountForm">
+                <label>Full Name</label>
+                <input id="newName" type="text" required />
+
+                <label>Email</label>
+                <input id="newEmail" type="email" required />
+
+                <label>Password</label>
+                <input id="newPassword" type="password" required />
+
+                <button type="submit">Create Account</button>
+            </form>
+
+            <p id="newMsg" class="msg"></p>
+        </section>
+    </main>
+
+    <script type="module" src="./src/js/loginPage.js"></script>
+</body>
+
+</html>
