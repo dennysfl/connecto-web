@@ -13,17 +13,30 @@ async function loadProfile(userId) {
     return data;
 }
 
-(async function init() {
+async function init() {
+    // Verifica sessão
     const session = await requireAuthOrRedirect();
     if (!session) return;
 
-    const profile = await loadProfile(session.user.id);
-
+    // Mostra email
     document.querySelector("#userEmail").textContent = session.user.email;
-    document.querySelector("#fullName").textContent = profile.full_name ?? "(sem nome)";
 
-    document.querySelector("#logoutBtn").addEventListener("click", async () => {
-        await signOut();
-        window.location.href = "/login.html";
+    // Logout
+    const logoutLink = document.querySelector("#logoutLink");
+
+    logoutLink.addEventListener("click", async (e) => {
+        e.preventDefault();
+
+        try {
+            await signOut();
+
+            // Garantia extra: força reload completo
+            window.location.replace("/Index.html");
+
+        } catch (err) {
+            console.error("Logout error:", err);
+        }
     });
-})();
+}
+
+init();
