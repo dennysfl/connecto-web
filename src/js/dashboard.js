@@ -2,6 +2,18 @@ import { supabase } from "./supabaseClient.js";
 import { requireAuthOrRedirect } from "./guard.js";
 import { signOut } from "./auth.js";
 
+const { data, error } = await supabase.auth.getSession();
+
+if (error) console.error(error);
+
+if (!data.session) {
+    // não está logado
+    window.location.href = "/login.html";
+} else {
+    // está logado; pode carregar dados do usuário
+    console.log("User:", data.session.user);
+}
+
 async function loadProfile(userId) {
     const { data, error } = await supabase
         .from("profiles")
@@ -29,9 +41,10 @@ async function init() {
 
         try {
             await signOut();
+            await supabase.auth.signOut();
 
             // Garantia extra: força reload completo
-            window.location.replace("/Index.html");
+            window.location.replace("/Login.html");
 
         } catch (err) {
             console.error("Logout error:", err);

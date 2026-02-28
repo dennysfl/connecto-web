@@ -1,0 +1,6 @@
+<script type="module">
+    import { supabase } from "./src/js/supabaseClient.js";
+
+    await supabase.auth.getSession();
+    window.close();
+</script>

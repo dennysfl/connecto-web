@@ -1,4 +1,5 @@
 import { signIn, signUp } from "./auth.js";
+import { supabase } from "./supabaseClient.js";
 
 const form = document.querySelector("#loginForm");
 const msg = document.querySelector("#msg");
@@ -51,4 +52,48 @@ formNew.addEventListener("submit", async (e) => {
         msgNew.textContent = err?.message ?? "Error creating account";
         console.error(err);
     }
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+    const btn = document.querySelector("#btnGoogle");
+    const msg = document.querySelector("#newMsgSign");
+
+    btn.addEventListener("click", async () => {
+        msg.textContent = "";
+
+        const { data, error } = await supabase.auth.signInWithOAuth({
+            provider: "google",
+            options: {
+                redirectTo: `${window.location.origin}/auth-callback.html`,
+                skipBrowserRedirect: true,
+                queryParams: {
+                    prompt: "select_account"
+                }
+
+            }
+        });
+
+        if (error) {
+            msg.textContent = error.message;
+            return;
+        }
+
+        // abre popup manualmente
+        const popup = window.open(
+            data.url,
+            "googleLogin",
+            "width=500,height=600"
+        );
+
+        // verifica quando login termina
+        const timer = setInterval(async () => {
+            const { data: sessionData } = await supabase.auth.getSession();
+
+            if (sessionData.session) {
+                clearInterval(timer);
+                popup?.close();
+                window.location.href = "/dashboard.html";
+            }
+        }, 500);
+    });
 });
