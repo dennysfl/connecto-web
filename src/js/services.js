@@ -6,25 +6,58 @@ const msg = document.querySelector("#msg");
 const listEl = document.querySelector("#servicesList");
 const logoutLink = document.querySelector("#logoutLink");
 
+const categorySel = document.querySelector("#categoryFilter");
+const clearBtn = document.querySelector("#clearFiltersBtn");
+const onlyFavsChk = document.querySelector("#onlyFavs");
+
+const savedCountEl = document.querySelector("#savedCount");
+const totalServicesEl = document.querySelector("#totalServices");
+
 function setMsg(text = "") {
     msg.textContent = text;
 }
 
-function renderServices(services, favoriteSet) {
-    if (!services.length) {
+function escapeHtml(str) {
+    return String(str ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
+
+function updateCounters(viewServices, favoriteSet) {
+    // Total = quantidade na lista exibida
+    totalServicesEl.textContent = viewServices.length;
+
+    // Saved = quantos dos exibidos estão favoritados
+    let savedInView = 0;
+    for (const s of viewServices) {
+        if (favoriteSet.has(s.id)) savedInView++;
+    }
+    savedCountEl.textContent = savedInView;
+}
+
+function renderServices(viewServices, favoriteSet) {
+    updateCounters(viewServices, favoriteSet);
+
+    if (!viewServices.length) {
         listEl.innerHTML = `<p class="muted">No services found.</p>`;
         return;
     }
 
-    listEl.innerHTML = services
+    listEl.innerHTML = viewServices
         .map((s) => {
             const isFav = favoriteSet.has(s.id);
             const btnLabel = isFav ? "Unsave" : "Save";
+
             return `
         <div class="card" style="margin-bottom:12px;">
           <div style="display:flex; justify-content:space-between; gap:12px;">
             <div>
-              <h3 style="margin:0 0 6px 0;">${escapeHtml(s.title)}</h3>
+              <h3 style="margin:0 0 6px 0;">
+                <a href="/serviceDetails.html?id=${s.id}">${escapeHtml(s.title)}</a>
+              </h3>
               <div class="muted">${escapeHtml(s.category)} · ${escapeHtml(s.city ?? "")} ${escapeHtml(s.country ?? "")}</div>
               <p style="margin:10px 0 0 0;">${escapeHtml(s.description ?? "")}</p>
             </div>
@@ -41,22 +74,15 @@ function renderServices(services, favoriteSet) {
         .join("");
 }
 
-function escapeHtml(str) {
-    return String(str ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
-}
-
-async function fetchServices() {
-    // services_select_active_or_own policy filtra corretamente
-    const { data, error } = await supabase
+async function fetchServices(filters = {}) {
+    let q = supabase
         .from("services")
         .select("id,title,description,category,city,country,is_active,owner_id,created_at")
         .order("created_at", { ascending: false });
 
+    if (filters.category) q = q.eq("category", filters.category);
+
+    const { data, error } = await q;
     if (error) throw error;
     return data ?? [];
 }
@@ -89,12 +115,67 @@ async function removeFavorite(userId, serviceId) {
     if (error) throw error;
 }
 
+async function fetchCategories() {
+    const { data, error } = await supabase.from("services").select("category");
+    if (error) throw error;
+
+    const unique = [...new Set((data ?? []).map(r => r.category).filter(Boolean))];
+    unique.sort((a, b) => a.localeCompare(b));
+    return unique;
+}
+
+function fillCategoryDropdown(categories) {
+    const options = categories
+        .map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`)
+        .join("");
+
+    categorySel.insertAdjacentHTML("beforeend", options);
+}
+
+// Estado local (evita gambiarras)
+let servicesState = [];
+let favoriteSetState = new Set();
+let userIdState = null;
+
+function getViewServices() {
+    let view = servicesState;
+
+    // only favorites = filtra local usando o Set
+    if (onlyFavsChk.checked) {
+        view = view.filter((s) => favoriteSetState.has(s.id));
+    }
+
+    return view;
+}
+
+async function reload() {
+    setMsg("Loading...");
+
+    const filters = {
+        category: categorySel.value || "",
+    };
+
+    // Recarrega serviços e favoritos sempre que algo muda
+    // (mantém contadores corretos e evita “estado velho”)
+    const [services, favSet] = await Promise.all([
+        fetchServices(filters),
+        fetchFavorites(userIdState),
+    ]);
+
+    servicesState = services;
+    favoriteSetState = favSet;
+
+    setMsg("");
+    renderServices(getViewServices(), favoriteSetState);
+}
+
 async function init() {
     const session = await requireAuthOrRedirect();
     if (!session) return;
 
-    const userId = session.user.id;
+    userIdState = session.user.id;
 
+    // Logout
     logoutLink.addEventListener("click", async (e) => {
         e.preventDefault();
         try {
@@ -106,16 +187,26 @@ async function init() {
         }
     });
 
-    setMsg("Loading...");
-    const [services, favoriteSet] = await Promise.all([
-        fetchServices(),
-        fetchFavorites(userId),
-    ]);
+    // Dropdown categories
+    const categories = await fetchCategories();
+    fillCategoryDropdown(categories);
 
-    setMsg("");
-    renderServices(services, favoriteSet);
+    // LISTENERS: UMA VEZ SÓ (corrige o seu item 2)
+    categorySel.addEventListener("change", reload);
 
-    // Delegation: um listener só para todos os botões
+    clearBtn.addEventListener("click", () => {
+        categorySel.value = "";
+        onlyFavsChk.checked = false;
+        reload();
+    });
+
+    onlyFavsChk.addEventListener("change", () => {
+        // Não precisa refazer query; mas como a gente refaz no reload,
+        // fica consistente (e mantém contadores sempre corretos).
+        reload();
+    });
+
+    // Clique Save/Unsave (event delegation)
     listEl.addEventListener("click", async (e) => {
         const btn = e.target.closest(".favBtn");
         if (!btn) return;
@@ -123,27 +214,30 @@ async function init() {
         const serviceId = btn.dataset.serviceId;
         const isFav = btn.dataset.isFav === "true";
 
-        // UI otimista simples
         btn.disabled = true;
         setMsg("");
 
         try {
             if (isFav) {
-                await removeFavorite(userId, serviceId);
-                favoriteSet.delete(serviceId);
+                await removeFavorite(userIdState, serviceId);
+                favoriteSetState.delete(serviceId);
             } else {
-                await addFavorite(userId, serviceId);
-                favoriteSet.add(serviceId);
+                await addFavorite(userIdState, serviceId);
+                favoriteSetState.add(serviceId);
             }
 
-            // re-render rápido (mantém consistente)
-            renderServices(services, favoriteSet);
+            // Re-render com o estado atualizado (contadores corretos)
+            renderServices(getViewServices(), favoriteSetState);
         } catch (err) {
             console.error(err);
             setMsg(err?.message ?? "Action failed");
-            btn.disabled = false; // fallback
+        } finally {
+            btn.disabled = false;
         }
     });
+
+    // Primeira carga
+    await reload();
 }
 
 init().catch((err) => {
