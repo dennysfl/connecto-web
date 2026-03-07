@@ -9,9 +9,11 @@ const logoutLink = document.querySelector("#logoutLink");
 const categorySel = document.querySelector("#categoryFilter");
 const clearBtn = document.querySelector("#clearFiltersBtn");
 const onlyFavsChk = document.querySelector("#onlyFavs");
+const onlyMyService = document.querySelector("#myServices");
 
 const savedCountEl = document.querySelector("#savedCount");
 const totalServicesEl = document.querySelector("#totalServices");
+const myServicesEl = document.querySelector("#totalMyServices");
 
 function setMsg(text = "") {
     msg.textContent = text;
@@ -26,20 +28,23 @@ function escapeHtml(str) {
         .replaceAll("'", "&#039;");
 }
 
-function updateCounters(viewServices, favoriteSet) {
-    // Total = quantidade na lista exibida
+function updateCounters(viewServices, favoriteSet, myServiceSet) {
     totalServicesEl.textContent = viewServices.length;
 
-    // Saved = quantos dos exibidos estão favoritados
     let savedInView = 0;
+    let myServicesInView = 0;
+
     for (const s of viewServices) {
         if (favoriteSet.has(s.id)) savedInView++;
+        if (myServiceSet.has(s.id)) myServicesInView++;
     }
+
     savedCountEl.textContent = savedInView;
+    myServicesEl.textContent = myServicesInView;
 }
 
-function renderServices(viewServices, favoriteSet) {
-    updateCounters(viewServices, favoriteSet);
+function renderServices(viewServices, favoriteSet, myServiceSet) {
+    updateCounters(viewServices, favoriteSet, myServiceSet);
 
     if (!viewServices.length) {
         listEl.innerHTML = `<p class="muted">No services found.</p>`;
@@ -49,27 +54,31 @@ function renderServices(viewServices, favoriteSet) {
     listEl.innerHTML = viewServices
         .map((s) => {
             const isFav = favoriteSet.has(s.id);
+            const isMine = myServiceSet.has(s.id);
             const btnLabel = isFav ? "Unsave" : "Save";
 
             return `
         <div class="card" style="margin-bottom:12px;">
-          <div style="display:flex; justify-content:space-between; gap:12px;">
+        <div style="display:flex; justify-content:space-between; gap:12px;">
             <div>
-              <h3 style="margin:0 0 6px 0;">
+            <h3 style="margin:0 0 6px 0;">
                 <a href="/serviceDetails.html?id=${s.id}">${escapeHtml(s.title)}</a>
-              </h3>
-              <div class="muted">${escapeHtml(s.category)} · ${escapeHtml(s.city ?? "")} ${escapeHtml(s.country ?? "")}</div>
-              <p style="margin:10px 0 0 0;">${escapeHtml(s.description ?? "")}</p>
+            </h3>
+            <div class="muted">
+                ${escapeHtml(s.category)} · ${escapeHtml(s.city ?? "")} ${escapeHtml(s.country ?? "")}
+                ${isMine ? "· My service" : ""}
+            </div>
+            <p style="margin:10px 0 0 0;">${escapeHtml(s.description ?? "")}</p>
             </div>
 
             <div style="min-width:110px; text-align:right;">
-              <button class="favBtn" data-service-id="${s.id}" data-is-fav="${isFav}">
+            <button class="favBtn" data-service-id="${s.id}" data-is-fav="${isFav}">
                 ${btnLabel}
-              </button>
+            </button>
             </div>
-          </div>
         </div>
-      `;
+        </div>
+        `;
         })
         .join("");
 }
@@ -95,6 +104,16 @@ async function fetchFavorites(userId) {
 
     if (error) throw error;
     return new Set((data ?? []).map((r) => r.service_id));
+}
+
+async function fetchMyServices(userId) {
+    const { data, error } = await supabase
+        .from("services")
+        .select("id")
+        .eq("owner_id", userId);
+
+    if (error) throw error;
+    return new Set((data ?? []).map((r) => r.id));
 }
 
 async function addFavorite(userId, serviceId) {
@@ -135,12 +154,17 @@ function fillCategoryDropdown(categories) {
 // Estado local (evita gambiarras)
 let servicesState = [];
 let favoriteSetState = new Set();
+let myServiceSetState = new Set();
 let userIdState = null;
 
 function getViewServices() {
     let view = servicesState;
 
     // only favorites = filtra local usando o Set
+    if (onlyMyService.checked) {
+        view = view.filter((s) => myServiceSetState.has(s.id));
+    }
+
     if (onlyFavsChk.checked) {
         view = view.filter((s) => favoriteSetState.has(s.id));
     }
@@ -157,16 +181,18 @@ async function reload() {
 
     // Recarrega serviços e favoritos sempre que algo muda
     // (mantém contadores corretos e evita “estado velho”)
-    const [services, favSet] = await Promise.all([
+    const [services, favSet, myServSet] = await Promise.all([
         fetchServices(filters),
         fetchFavorites(userIdState),
+        fetchMyServices(userIdState),
     ]);
 
     servicesState = services;
     favoriteSetState = favSet;
+    myServiceSetState = myServSet;
 
     setMsg("");
-    renderServices(getViewServices(), favoriteSetState);
+    renderServices(getViewServices(), favoriteSetState, myServiceSetState);
 }
 
 async function init() {
@@ -178,6 +204,7 @@ async function init() {
     // Logout
     logoutLink.addEventListener("click", async (e) => {
         e.preventDefault();
+
         try {
             await signOut();
             window.location.replace("/login.html");
@@ -197,12 +224,17 @@ async function init() {
     clearBtn.addEventListener("click", () => {
         categorySel.value = "";
         onlyFavsChk.checked = false;
+        onlyMyService.checked = false;
         reload();
     });
 
     onlyFavsChk.addEventListener("change", () => {
         // Não precisa refazer query; mas como a gente refaz no reload,
         // fica consistente (e mantém contadores sempre corretos).
+        reload();
+    });
+
+    onlyMyService.addEventListener("change", () => {
         reload();
     });
 
@@ -213,6 +245,7 @@ async function init() {
 
         const serviceId = btn.dataset.serviceId;
         const isFav = btn.dataset.isFav === "true";
+        const isMyService = btn.dataset.isMyService === "false";
 
         btn.disabled = true;
         setMsg("");

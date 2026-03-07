@@ -18,6 +18,10 @@
             <a href="#" id="logoutLink">Logout</a>
         </div>
 
+        <div style="display:flex; gap:12px; margin: 12px 0;">
+            <a href="/serviceNew.html">New Service</a>
+        </div>
+
         <div class="card" style="margin-bottom:12px;">
             <label for="categoryFilter">Category</label>
             <select id="categoryFilter">
@@ -32,10 +36,14 @@
                 <input id="onlyFavs" type="checkbox" /> Only favorites
             </label>
 
+            <label style="display:flex; gap:8px; align-items:center; margin-top:10px;">
+                <input id="myServices" type="checkbox" /> My Services
+            </label>
         </div>
 
         <p class="muted">Saved: <strong id="savedCount">0</strong></p>
         <p class="muted">Total: <strong id="totalServices">0</strong></p>
+        <p class="muted">My Services: <strong id="totalMyServices">0</strong></p>
         <p id="msg" class="msg"></p>
         <div id="servicesList"></div>
     </main>
