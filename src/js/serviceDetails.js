@@ -6,7 +6,12 @@ const msg = document.querySelector("#msg");
 const detailsEl = document.querySelector("#details");
 const logoutLink = document.querySelector("#logoutLink");
 
-function setMsg(t = "") { msg.textContent = t; }
+let userIdState = null;
+let serviceIdState = null;
+
+function setMsg(t = "") {
+    msg.textContent = t;
+}
 
 function escapeHtml(str) {
     return String(str ?? "")
@@ -15,6 +20,11 @@ function escapeHtml(str) {
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
+}
+
+function getServiceIdFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("id");
 }
 
 async function fetchServiceById(id) {
@@ -28,37 +38,116 @@ async function fetchServiceById(id) {
     return data;
 }
 
+async function deleteService(serviceId) {
+    const { error } = await supabase
+        .from("services")
+        .delete()
+        .eq("id", serviceId);
+
+    if (error) throw error;
+}
+
+function renderServiceDetails(service, currentUserId) {
+    const isOwner = service.owner_id === currentUserId;
+
+    detailsEl.innerHTML = `
+        <h2 style="margin-top:0;">${escapeHtml(service.title)}</h2>
+
+        <div class="muted">
+            ${escapeHtml(service.category)}
+            · ${escapeHtml(service.city ?? "")}
+            ${escapeHtml(service.country ?? "")}
+        </div>
+
+        <p style="margin-top:12px;">
+            ${escapeHtml(service.description ?? "")}
+        </p>
+
+        <p class="muted" style="margin-top:12px;">
+            Status: ${service.is_active ? "Active" : "Inactive"}
+        </p>
+
+        ${isOwner
+            ? `
+                <div style="display:flex; gap:10px; margin-top:16px;">
+                    <button id="editServiceBtn" type="button">Edit</button>
+                    <button id="deleteServiceBtn" type="button">Delete</button>
+                </div>
+                `
+            : ""
+        }
+    `;
+}
+
 async function init() {
     const session = await requireAuthOrRedirect();
     if (!session) return;
 
+    userIdState = session.user.id;
+    serviceIdState = getServiceIdFromUrl();
+
     logoutLink.addEventListener("click", async (e) => {
         e.preventDefault();
-        await signOut();
-        window.location.replace("/login.html");
+
+        try {
+            await signOut();
+            window.location.replace("/login.html");
+        } catch (err) {
+            console.error(err);
+            setMsg(err?.message ?? "Logout failed.");
+        }
     });
 
-    const params = new URLSearchParams(window.location.search);
-    const id = params.get("id");
-    if (!id) {
+    // Event delegation:
+    // os botões são renderizados depois, então o listener fica no pai fixo.
+    detailsEl.addEventListener("click", async (e) => {
+        const editBtn = e.target.closest("#editServiceBtn");
+        const deleteBtn = e.target.closest("#deleteServiceBtn");
+
+        if (editBtn) {
+            e.preventDefault();
+            window.location.replace(`/serviceNew.html?id=${serviceIdState}`);
+            return;
+        }
+
+        if (deleteBtn) {
+            e.preventDefault();
+
+            const confirmed = window.confirm("Do you really want to delete this service?");
+            if (!confirmed) return;
+
+            try {
+                deleteBtn.disabled = true;
+                setMsg("Deleting...");
+
+                await deleteService(serviceIdState);
+
+                window.location.replace("/services.html");
+            } catch (err) {
+                console.error(err);
+                setMsg(err?.message ?? "Failed to delete service.");
+            }
+        }
+    });
+
+    if (!serviceIdState) {
         setMsg("Missing service id in URL.");
         return;
     }
 
     setMsg("Loading...");
-    try {
-        const s = await fetchServiceById(id);
-        setMsg("");
 
-        detailsEl.innerHTML = `
-      <h2 style="margin-top:0;">${escapeHtml(s.title)}</h2>
-      <div class="muted">${escapeHtml(s.category)} · ${escapeHtml(s.city ?? "")} ${escapeHtml(s.country ?? "")}</div>
-      <p style="margin-top:12px;">${escapeHtml(s.description ?? "")}</p>
-    `;
+    try {
+        const service = await fetchServiceById(serviceIdState);
+        renderServiceDetails(service, userIdState);
+        setMsg("");
     } catch (err) {
         console.error(err);
         setMsg(err?.message ?? "Failed to load service.");
     }
 }
 
-init();
+init().catch((err) => {
+    console.error(err);
+    setMsg(err?.message ?? "Unexpected error.");
+});
