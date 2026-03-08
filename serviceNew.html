@@ -4,13 +4,13 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Connecto - Service Details</title>
+    <title>Connecto - Service Form</title>
     <link rel="stylesheet" href="./src/css/styles.css" />
 </head>
 
 <body>
     <main class="container">
-        <h1>New Service</h1>
+        <h1 id="pageTitle">New Service</h1>
 
         <div style="display:flex; gap:12px; margin: 12px 0;">
             <a href="/services.html">Back</a>
@@ -18,22 +18,27 @@
         </div>
 
         <form id="serviceForm">
-            <label>Title</label>
+            <label for="serviceTitle">Title</label>
             <input id="serviceTitle" type="text" required />
 
-            <label>Description</label>
+            <label for="serviceDesc">Description</label>
             <input id="serviceDesc" type="text" required />
 
-            <label>Category</label>
-            <input id="serviceCate" type="text" required />
+            <label for="serviceCate">Category</label>
+            <select id="serviceCate" required></select>
 
-            <label>City</label>
+            <label for="serviceCity">City</label>
             <input id="serviceCity" type="text" required />
 
-            <label>Country</label>
+            <label for="serviceCountry">Country</label>
             <input id="serviceCountry" type="text" required />
 
-            <button type="submit">Save</button>
+            <label style="display:flex; gap:8px; align-items:center; margin-top:12px;">
+                <input id="serviceIsActive" type="checkbox" checked />
+                Active
+            </label>
+
+            <button type="submit" id="saveBtn">Save</button>
         </form>
 
         <p id="msg" class="msg"></p>
