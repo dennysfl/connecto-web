@@ -7,9 +7,12 @@ const listEl = document.querySelector("#servicesList");
 const logoutLink = document.querySelector("#logoutLink");
 
 const categorySel = document.querySelector("#categoryFilter");
+const filterText = document.querySelector("#searchText");
 const clearBtn = document.querySelector("#clearFiltersBtn");
+const filterBtn = document.querySelector("#runFiltersBtn");
 const onlyFavsChk = document.querySelector("#onlyFavs");
 const onlyMyServicesChk = document.querySelector("#myServices");
+const onlyMyInactive = document.querySelector("#myInactive");
 
 const savedCountEl = document.querySelector("#savedCount");
 const totalServicesEl = document.querySelector("#totalServices");
@@ -37,20 +40,35 @@ function escapeHtml(str) {
 let servicesState = [];
 let favoriteSetState = new Set();
 let myServiceSetState = new Set();
+let myInactiveSetState = new Set();
 let userIdState = null;
 
 // --------------------
 // Fetch / Data access
 // --------------------
 async function fetchServices(filters = {}) {
+    // ✅ CORREÇÃO: se o usuário quer ver inativos, buscamos inativos.
+    // Caso contrário, buscamos só os ativos (comportamento original).
+    const isActiveFilter = filters.onlyInactive ? false : true;
+
     let q = supabase
         .from("services")
         .select("id,title,description,category,city,country,is_active,owner_id,created_at")
-        .eq("is_active", true)
+        .eq("is_active", isActiveFilter)
         .order("created_at", { ascending: false });
+
+    // ✅ CORREÇÃO: quando buscamos inativos, já filtramos pelo dono aqui na query,
+    // assim o banco faz o trabalho pesado em vez de trazer tudo pra memória.
+    if (filters.onlyInactive) {
+        q = q.eq("owner_id", userIdState);
+    }
 
     if (filters.category) {
         q = q.eq("category", filters.category);
+    }
+
+    if (filters.filterDescription) {
+        q = q.or(`title.ilike.%${filters.filterDescription}%, description.ilike.%${filters.filterDescription}%`)
     }
 
     const { data, error } = await q;
@@ -74,6 +92,17 @@ async function fetchMyServices(userId) {
         .from("services")
         .select("id")
         .eq("owner_id", userId);
+
+    if (error) throw error;
+    return new Set((data ?? []).map((row) => row.id));
+}
+
+async function fetchMyInactive(userId) {
+    const { data, error } = await supabase
+        .from("services")
+        .select("id")
+        .eq("owner_id", userId)
+        .eq("is_active", false);
 
     if (error) throw error;
     return new Set((data ?? []).map((row) => row.id));
@@ -124,6 +153,10 @@ function fillCategoryDropdown(categories) {
 function getViewServices() {
     let view = [...servicesState];
 
+    if (onlyMyInactive.checked) {
+        view = view.filter((service) => myInactiveSetState.has(service.id));
+    }
+
     if (onlyMyServicesChk.checked) {
         view = view.filter((service) => myServiceSetState.has(service.id));
     }
@@ -150,7 +183,7 @@ function updateCounters(viewServices, favoriteSet, myServiceSet) {
     myServicesEl.textContent = myServicesInView;
 }
 
-function renderServices(viewServices, favoriteSet, myServiceSet) {
+function renderServices(viewServices, favoriteSet, myServiceSet, myInactiveSet) {
     updateCounters(viewServices, favoriteSet, myServiceSet);
 
     if (!viewServices.length) {
@@ -162,6 +195,7 @@ function renderServices(viewServices, favoriteSet, myServiceSet) {
         .map((service) => {
             const isFav = favoriteSet.has(service.id);
             const isMine = myServiceSet.has(service.id);
+            const isInactive = myInactiveSet.has(service.id);
             const btnLabel = isFav ? "Unsave" : "Save";
 
             return `
@@ -179,6 +213,7 @@ function renderServices(viewServices, favoriteSet, myServiceSet) {
                                 · ${escapeHtml(service.city ?? "")}
                                 ${escapeHtml(service.country ?? "")}
                                 ${isMine ? "· My service" : ""}
+                                ${isInactive ? "· <strong>Inactive</strong>" : ""}
                             </div>
 
                             <p style="margin:10px 0 0 0;">
@@ -187,19 +222,41 @@ function renderServices(viewServices, favoriteSet, myServiceSet) {
                         </div>
 
                         <div style="min-width:110px; text-align:right;">
-                            <button
-                                class="favBtn"
-                                data-service-id="${service.id}"
-                                data-is-fav="${isFav}"
-                            >
-                                ${btnLabel}
-                            </button>
+                            ${!isInactive ? `
+                                <button
+                                    class="favBtn"
+                                    data-service-id="${service.id}"
+                                    data-is-fav="${isFav}"
+                                >
+                                    ${btnLabel}
+                                </button>
+                            ` : ""}
+
+                            ${isInactive ? `
+                                <button
+                                    class="activateBtn"
+                                    data-service-id="${service.id}"
+                                >
+                                    Activate
+                                </button>
+                            ` : ""}
                         </div>
                     </div>
                 </div>
             `;
         })
         .join("");
+}
+
+// ✅ NOVO: reativa um serviço inativo
+async function activateService(serviceId) {
+    const { error } = await supabase
+        .from("services")
+        .update({ is_active: true })
+        .eq("id", serviceId)
+        .eq("owner_id", userIdState); // segurança: só o dono pode reativar
+
+    if (error) throw error;
 }
 
 // --------------------
@@ -210,20 +267,24 @@ async function reload() {
 
     const filters = {
         category: categorySel.value || "",
+        onlyInactive: onlyMyInactive.checked,   // passa o estado do checkbox pro fetch
+        filterDescription: filterText.value.trim() || "",     // passa o search pro fetch
     };
 
-    const [services, favoriteSet, myServiceSet] = await Promise.all([
+    const [services, favoriteSet, myServiceSet, myInactiveSet] = await Promise.all([
         fetchServices(filters),
         fetchFavorites(userIdState),
         fetchMyServices(userIdState),
+        fetchMyInactive(userIdState),
     ]);
 
     servicesState = services;
     favoriteSetState = favoriteSet;
     myServiceSetState = myServiceSet;
+    myInactiveSetState = myInactiveSet;
 
     setMsg("");
-    renderServices(getViewServices(), favoriteSetState, myServiceSetState);
+    renderServices(getViewServices(), favoriteSetState, myServiceSetState, myInactiveSetState);
 }
 
 // --------------------
@@ -256,37 +317,76 @@ async function init() {
         categorySel.value = "";
         onlyFavsChk.checked = false;
         onlyMyServicesChk.checked = false;
+        onlyMyInactive.checked = false;
+        filterText.value = "";
+        reload();
+    });
+
+    filterBtn.addEventListener("click", () => {
         reload();
     });
 
     onlyFavsChk.addEventListener("change", reload);
     onlyMyServicesChk.addEventListener("change", reload);
 
+    // ✅ CORREÇÃO: ao marcar "My Inactive Services",
+    // força os outros dois checkboxes para o estado correto antes de recarregar.
+    onlyMyInactive.addEventListener("change", () => {
+        if (onlyMyInactive.checked) {
+            onlyFavsChk.checked = false;       // Favorites → false
+            onlyMyServicesChk.checked = true;  // My Services → true
+        }
+        reload();
+    });
+
     listEl.addEventListener("click", async (e) => {
-        const btn = e.target.closest(".favBtn");
-        if (!btn) return;
+        // --- favoritar / desfavoritar (lógica original) ---
+        const favBtn = e.target.closest(".favBtn");
+        if (favBtn) {
+            const serviceId = favBtn.dataset.serviceId;
+            const isFav = favBtn.dataset.isFav === "true";
 
-        const serviceId = btn.dataset.serviceId;
-        const isFav = btn.dataset.isFav === "true";
+            favBtn.disabled = true;
+            setMsg("");
 
-        btn.disabled = true;
-        setMsg("");
+            try {
+                if (isFav) {
+                    await removeFavorite(userIdState, serviceId);
+                    favoriteSetState.delete(serviceId);
+                } else {
+                    await addFavorite(userIdState, serviceId);
+                    favoriteSetState.add(serviceId);
+                }
 
-        try {
-            if (isFav) {
-                await removeFavorite(userIdState, serviceId);
-                favoriteSetState.delete(serviceId);
-            } else {
-                await addFavorite(userIdState, serviceId);
-                favoriteSetState.add(serviceId);
+                renderServices(getViewServices(), favoriteSetState, myServiceSetState, myInactiveSetState);
+            } catch (err) {
+                console.error(err);
+                setMsg(err?.message ?? "Action failed");
+            } finally {
+                favBtn.disabled = false;
             }
+        }
 
-            renderServices(getViewServices(), favoriteSetState, myServiceSetState);
-        } catch (err) {
-            console.error(err);
-            setMsg(err?.message ?? "Action failed");
-        } finally {
-            btn.disabled = false;
+        // ✅ NOVO: reativar serviço inativo
+        const activateBtn = e.target.closest(".activateBtn");
+        if (activateBtn) {
+            const serviceId = activateBtn.dataset.serviceId;
+
+            const confirmed = window.confirm("Do you want to activate this service again?");
+            if (!confirmed) return;
+
+            activateBtn.disabled = true;
+            setMsg("");
+
+            try {
+                await activateService(serviceId);
+                await reload(); // recarrega a lista toda após reativar
+                setMsg("Service activated successfully.");
+            } catch (err) {
+                console.error(err);
+                setMsg(err?.message ?? "Failed to activate service.");
+                activateBtn.disabled = false;
+            }
         }
     });
 

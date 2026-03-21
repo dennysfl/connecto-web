@@ -23,27 +23,32 @@
         </div>
 
         <div class="card" style="margin-bottom:12px;">
+            <label for="searchText">Search</label>
+            <input id="searchText"></input>
+
             <label for="categoryFilter">Category</label>
             <select id="categoryFilter">
                 <option value="">All</option>
             </select>
 
             <div style="margin-top:10px; display:flex; gap:10px;">
+                <button id="runFiltersBtn" type="button">Show Results</button>
                 <button id="clearFiltersBtn" type="button">Clear filters</button>
             </div>
 
             <label style="display:flex; gap:8px; align-items:center; margin-top:10px;">
                 <input id="onlyFavs" type="checkbox" /> Only favorites
-            </label>
-
-            <label style="display:flex; gap:8px; align-items:center; margin-top:10px;">
                 <input id="myServices" type="checkbox" /> My Services
+                <input id="myInactive" type="checkbox" /> My Inactive Services
             </label>
         </div>
 
-        <p class="muted">Saved: <strong id="savedCount">0</strong></p>
-        <p class="muted">Total: <strong id="totalServices">0</strong></p>
-        <p class="muted">My Services: <strong id="totalMyServices">0</strong></p>
+        <p class="muted">
+            Saved: <strong id="savedCount">0</strong>
+            | My Services: <strong id="totalMyServices">0</strong>
+            | Total: <strong id="totalServices">0</strong>
+        </p>
+
         <p id="msg" class="msg"></p>
         <div id="servicesList"></div>
     </main>
