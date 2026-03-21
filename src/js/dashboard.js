@@ -2,22 +2,12 @@ import { supabase } from "./supabaseClient.js";
 import { requireAuthOrRedirect } from "./guard.js";
 import { signOut } from "./auth.js";
 
-const { data, error } = await supabase.auth.getSession();
-
-if (error) console.error(error);
-
-if (!data.session) {
-    // não está logado
-    window.location.href = "/login.html";
-} else {
-    // está logado; pode carregar dados do usuário
-    console.log("User:", data.session.user);
-}
+const logoutLink = document.querySelector("#logoutLink");
 
 async function loadProfile(userId) {
     const { data, error } = await supabase
         .from("profiles")
-        .select("id, full_name, username, country, city")
+        .select("full_name")
         .eq("id", userId)
         .single();
 
@@ -26,26 +16,25 @@ async function loadProfile(userId) {
 }
 
 async function init() {
-    // Verifica sessão
     const session = await requireAuthOrRedirect();
     if (!session) return;
 
-    // Mostra email
-    document.querySelector("#userEmail").textContent = session.user.email;
+    try {
+        const profile = await loadProfile(session.user.id);
 
-    // Logout
-    const logoutLink = document.querySelector("#logoutLink");
+        document.querySelector("#userName").textContent =
+            profile.full_name ?? session.user.email;
+    } catch (err) {
+        console.error("Profile load error:", err);
+        document.querySelector("#userName").textContent = session.user.email;
+    }
 
     logoutLink.addEventListener("click", async (e) => {
         e.preventDefault();
 
         try {
             await signOut();
-            await supabase.auth.signOut();
-
-            // Garantia extra: força reload completo
-            window.location.replace("/Login.html");
-
+            window.location.replace("/login.html");
         } catch (err) {
             console.error("Logout error:", err);
         }
