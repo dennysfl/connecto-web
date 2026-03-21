@@ -7,6 +7,7 @@ const listEl = document.querySelector("#servicesList");
 const logoutLink = document.querySelector("#logoutLink");
 
 const categorySel = document.querySelector("#categoryFilter");
+const sortSel = document.querySelector("#sortService");
 const filterText = document.querySelector("#searchText");
 const clearBtn = document.querySelector("#clearFiltersBtn");
 const filterBtn = document.querySelector("#runFiltersBtn");
@@ -46,7 +47,7 @@ let userIdState = null;
 // --------------------
 // Fetch / Data access
 // --------------------
-async function fetchServices(filters = {}) {
+async function fetchServices(filters = {}, orders = {}) {
     // ✅ CORREÇÃO: se o usuário quer ver inativos, buscamos inativos.
     // Caso contrário, buscamos só os ativos (comportamento original).
     const isActiveFilter = filters.onlyInactive ? false : true;
@@ -55,9 +56,18 @@ async function fetchServices(filters = {}) {
         .from("services")
         .select("id,title,description,category,city,country,is_active,owner_id,created_at")
         .eq("is_active", isActiveFilter)
-        .order("created_at", { ascending: false });
 
-    // ✅ CORREÇÃO: quando buscamos inativos, já filtramos pelo dono aqui na query,
+    if (orders.sortBy == "Newest") {
+        q = q.order("created_at", { ascending: false });
+    }
+    else if (orders.sortBy == "Oldest") {
+        q = q.order("created_at", { ascending: true });
+    }
+    else if (orders.sortBy == "AZ") {
+        q = q.order("title", { ascending: true });
+    }
+
+    // quando buscamos inativos, já filtramos pelo dono aqui na query,
     // assim o banco faz o trabalho pesado em vez de trazer tudo pra memória.
     if (filters.onlyInactive) {
         q = q.eq("owner_id", userIdState);
@@ -267,12 +277,16 @@ async function reload() {
 
     const filters = {
         category: categorySel.value || "",
-        onlyInactive: onlyMyInactive.checked,   // passa o estado do checkbox pro fetch
-        filterDescription: filterText.value.trim() || "",     // passa o search pro fetch
+        onlyInactive: onlyMyInactive.checked,               // passa o estado do checkbox pro fetch
+        filterDescription: filterText.value.trim() || "",   // passa o search pro fetch
     };
 
+    const orderBy = {
+        sortBy: sortSel.value || "",
+    }
+
     const [services, favoriteSet, myServiceSet, myInactiveSet] = await Promise.all([
-        fetchServices(filters),
+        fetchServices(filters, orderBy),
         fetchFavorites(userIdState),
         fetchMyServices(userIdState),
         fetchMyInactive(userIdState),
@@ -313,12 +327,15 @@ async function init() {
 
     categorySel.addEventListener("change", reload);
 
+    sortSel.addEventListener("change", reload);
+
     clearBtn.addEventListener("click", () => {
         categorySel.value = "";
         onlyFavsChk.checked = false;
         onlyMyServicesChk.checked = false;
         onlyMyInactive.checked = false;
         filterText.value = "";
+        sortSel.value = "Newest";
         reload();
     });
 
