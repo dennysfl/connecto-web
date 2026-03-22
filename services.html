@@ -56,8 +56,18 @@
             <option value="AZ">A-Z</option>
         </select>
 
+        <label for="paginationService">Show Results:</label>
+        <select id="paginationService">
+            <option value="2">2</option>
+            <option value="5">5</option>
+            <option value="10">10</option>
+            <option value="All">All</option>
+        </select>
+
         <p id="msg" class="msg"></p>
         <div id="servicesList"></div>
+
+        <div id="pagination" style="display:flex; gap:12px; align-items:center; margin-top:16px;"></div>
     </main>
 
     <script type="module" src="./src/js/services.js"></script>
