@@ -8,6 +8,7 @@ const logoutLink = document.querySelector("#logoutLink");
 
 const categorySel = document.querySelector("#categoryFilter");
 const sortSel = document.querySelector("#sortService");
+const paginationSel = document.querySelector("#paginationService");
 const filterText = document.querySelector("#searchText");
 const clearBtn = document.querySelector("#clearFiltersBtn");
 const filterBtn = document.querySelector("#runFiltersBtn");
@@ -44,47 +45,42 @@ let myServiceSetState = new Set();
 let myInactiveSetState = new Set();
 let userIdState = null;
 
+let currentPageState = 1;
+let perPageState = 2;
+
 // --------------------
 // Fetch / Data access
 // --------------------
-async function fetchServices(filters = {}, orders = {}) {
-    // ✅ CORREÇÃO: se o usuário quer ver inativos, buscamos inativos.
-    // Caso contrário, buscamos só os ativos (comportamento original).
+async function fetchServices(filters = {}, orders = {}, pages = {}) {
     const isActiveFilter = filters.onlyInactive ? false : true;
 
     let q = supabase
         .from("services")
-        .select("id,title,description,category,city,country,is_active,owner_id,created_at")
-        .eq("is_active", isActiveFilter)
+        .select("id,title,description,category,city,country,is_active,owner_id,created_at", { count: "exact" })
+        .eq("is_active", isActiveFilter);
 
-    if (orders.sortBy == "Newest") {
-        q = q.order("created_at", { ascending: false });
-    }
-    else if (orders.sortBy == "Oldest") {
-        q = q.order("created_at", { ascending: true });
-    }
-    else if (orders.sortBy == "AZ") {
-        q = q.order("title", { ascending: true });
-    }
+    if (orders.sortBy === "Newest") q = q.order("created_at", { ascending: false });
+    else if (orders.sortBy === "Oldest") q = q.order("created_at", { ascending: true });
+    else if (orders.sortBy === "AZ") q = q.order("title", { ascending: true });
 
-    // quando buscamos inativos, já filtramos pelo dono aqui na query,
-    // assim o banco faz o trabalho pesado em vez de trazer tudo pra memória.
-    if (filters.onlyInactive) {
-        q = q.eq("owner_id", userIdState);
-    }
-
-    if (filters.category) {
-        q = q.eq("category", filters.category);
-    }
-
+    if (filters.onlyInactive) q = q.eq("owner_id", userIdState);
+    if (filters.category) q = q.eq("category", filters.category);
     if (filters.filterDescription) {
-        q = q.or(`title.ilike.%${filters.filterDescription}%, description.ilike.%${filters.filterDescription}%`)
+        q = q.or(`title.ilike.%${filters.filterDescription}%,description.ilike.%${filters.filterDescription}%`);
     }
 
-    const { data, error } = await q;
+    // paginacao com .range() - so aplica se nao for "All"
+    if (pages.perPage !== "All") {
+        const perPage = Number(pages.perPage);
+        const from = (pages.currentPage - 1) * perPage;
+        const to = from + perPage - 1;
+        q = q.range(from, to);
+    }
 
+    const { data, error, count } = await q;
     if (error) throw error;
-    return data ?? [];
+
+    return { data: data ?? [], total: count ?? 0 };
 }
 
 async function fetchFavorites(userId) {
@@ -193,6 +189,27 @@ function updateCounters(viewServices, favoriteSet, myServiceSet) {
     myServicesEl.textContent = myServicesInView;
 }
 
+// BUG 5 CORRIGIDO: renderPagination so monta o HTML.
+// O event listener fica no init(), fora daqui, para nao se acumular a cada reload.
+function renderPagination(total, perPage, currentPage) {
+    const paginationEl = document.querySelector("#pagination");
+
+    if (perPage === "All" || total <= perPage) {
+        paginationEl.innerHTML = "";
+        return;
+    }
+
+    const totalPages = Math.ceil(total / perPage);
+
+    paginationEl.innerHTML = `
+        <button class="pageBtn" data-page="1"                  ${currentPage === 1 ? "disabled" : ""}>First</button>
+        <button class="pageBtn" data-page="${currentPage - 1}" ${currentPage === 1 ? "disabled" : ""}>Previous</button>
+        <span>Page ${currentPage} of ${totalPages}</span>
+        <button class="pageBtn" data-page="${currentPage + 1}" ${currentPage === totalPages ? "disabled" : ""}>Next</button>
+        <button class="pageBtn" data-page="${totalPages}"      ${currentPage === totalPages ? "disabled" : ""}>Last</button>
+    `;
+}
+
 function renderServices(viewServices, favoriteSet, myServiceSet, myInactiveSet) {
     updateCounters(viewServices, favoriteSet, myServiceSet);
 
@@ -258,13 +275,12 @@ function renderServices(viewServices, favoriteSet, myServiceSet, myInactiveSet) 
         .join("");
 }
 
-// ✅ NOVO: reativa um serviço inativo
 async function activateService(serviceId) {
     const { error } = await supabase
         .from("services")
         .update({ is_active: true })
         .eq("id", serviceId)
-        .eq("owner_id", userIdState); // segurança: só o dono pode reativar
+        .eq("owner_id", userIdState);
 
     if (error) throw error;
 }
@@ -277,16 +293,25 @@ async function reload() {
 
     const filters = {
         category: categorySel.value || "",
-        onlyInactive: onlyMyInactive.checked,               // passa o estado do checkbox pro fetch
-        filterDescription: filterText.value.trim() || "",   // passa o search pro fetch
+        onlyInactive: onlyMyInactive.checked,
+        filterDescription: filterText.value.trim() || "",
     };
 
     const orderBy = {
         sortBy: sortSel.value || "",
-    }
+    };
 
-    const [services, favoriteSet, myServiceSet, myInactiveSet] = await Promise.all([
-        fetchServices(filters, orderBy),
+    // BUG 1+2+3 CORRIGIDOS:
+    // - pages passa perPageState e currentPageState corretamente
+    // - fetchServices retorna { data, total } -- desestruturamos aqui
+    // - total fica disponivel para o renderPagination logo abaixo
+    const pages = {
+        perPage: perPageState,
+        currentPage: currentPageState,
+    };
+
+    const [{ data: services, total }, favoriteSet, myServiceSet, myInactiveSet] = await Promise.all([
+        fetchServices(filters, orderBy, pages),
         fetchFavorites(userIdState),
         fetchMyServices(userIdState),
         fetchMyInactive(userIdState),
@@ -299,6 +324,7 @@ async function reload() {
 
     setMsg("");
     renderServices(getViewServices(), favoriteSetState, myServiceSetState, myInactiveSetState);
+    renderPagination(total, perPageState, currentPageState);
 }
 
 // --------------------
@@ -326,8 +352,15 @@ async function init() {
     fillCategoryDropdown(categories);
 
     categorySel.addEventListener("change", reload);
-
     sortSel.addEventListener("change", reload);
+
+    // BUG 4 CORRIGIDO: era perPageSel (inexistente) -> paginationSel
+    //                  e faltava o ) para fechar o addEventListener
+    paginationSel.addEventListener("change", () => {
+        perPageState = paginationSel.value;  // "2", "5", "10" ou "All"
+        currentPageState = 1;                // volta pro inicio ao mudar itens por pagina
+        reload();
+    });
 
     clearBtn.addEventListener("click", () => {
         categorySel.value = "";
@@ -336,28 +369,48 @@ async function init() {
         onlyMyInactive.checked = false;
         filterText.value = "";
         sortSel.value = "Newest";
+        paginationSel.value = "2";
+        perPageState = 2;       // reseta o estado tambem, nao so o dropdown
+        currentPageState = 1;
         reload();
     });
 
     filterBtn.addEventListener("click", () => {
+        currentPageState = 1;   // ao aplicar filtro, volta pra pagina 1
         reload();
     });
 
-    onlyFavsChk.addEventListener("change", reload);
-    onlyMyServicesChk.addEventListener("change", reload);
+    onlyFavsChk.addEventListener("change", () => {
+        currentPageState = 1;
+        reload();
+    });
 
-    // ✅ CORREÇÃO: ao marcar "My Inactive Services",
-    // força os outros dois checkboxes para o estado correto antes de recarregar.
+    onlyMyServicesChk.addEventListener("change", () => {
+        currentPageState = 1;
+        reload();
+    });
+
     onlyMyInactive.addEventListener("change", () => {
         if (onlyMyInactive.checked) {
-            onlyFavsChk.checked = false;       // Favorites → false
-            onlyMyServicesChk.checked = true;  // My Services → true
+            onlyFavsChk.checked = false;
+            onlyMyServicesChk.checked = true;
         }
+        currentPageState = 1;
+        reload();
+    });
+
+    // BUG 5 CORRIGIDO: listener da paginacao fica aqui no init(),
+    // registrado uma unica vez -- nunca se acumula.
+    const paginationEl = document.querySelector("#pagination");
+    paginationEl.addEventListener("click", (e) => {
+        const btn = e.target.closest(".pageBtn");
+        if (!btn) return;
+
+        currentPageState = Number(btn.dataset.page);
         reload();
     });
 
     listEl.addEventListener("click", async (e) => {
-        // --- favoritar / desfavoritar (lógica original) ---
         const favBtn = e.target.closest(".favBtn");
         if (favBtn) {
             const serviceId = favBtn.dataset.serviceId;
@@ -384,7 +437,6 @@ async function init() {
             }
         }
 
-        // ✅ NOVO: reativar serviço inativo
         const activateBtn = e.target.closest(".activateBtn");
         if (activateBtn) {
             const serviceId = activateBtn.dataset.serviceId;
@@ -397,7 +449,7 @@ async function init() {
 
             try {
                 await activateService(serviceId);
-                await reload(); // recarrega a lista toda após reativar
+                await reload();
                 setMsg("Service activated successfully.");
             } catch (err) {
                 console.error(err);
