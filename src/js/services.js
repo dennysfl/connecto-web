@@ -37,7 +37,7 @@ function escapeHtml(str) {
 }
 
 // --------------------
-// Estado local da página
+// Estado local da pagina
 // --------------------
 let servicesState = [];
 let favoriteSetState = new Set();
@@ -56,7 +56,7 @@ async function fetchServices(filters = {}, orders = {}, pages = {}) {
 
     let q = supabase
         .from("services")
-        .select("id,title,description,category,city,country,is_active,owner_id,created_at", { count: "exact" })
+        .select("id, title, description, category, city, country, is_active, owner_id, created_at, service_ratings(rating)", { count: "exact" })
         .eq("is_active", isActiveFilter);
 
     if (orders.sortBy === "Newest") q = q.order("created_at", { ascending: false });
@@ -69,7 +69,6 @@ async function fetchServices(filters = {}, orders = {}, pages = {}) {
         q = q.or(`title.ilike.%${filters.filterDescription}%,description.ilike.%${filters.filterDescription}%`);
     }
 
-    // paginacao com .range() - so aplica se nao for "All"
     if (pages.perPage !== "All") {
         const perPage = Number(pages.perPage);
         const from = (pages.currentPage - 1) * perPage;
@@ -189,8 +188,80 @@ function updateCounters(viewServices, favoriteSet, myServiceSet) {
     myServicesEl.textContent = myServicesInView;
 }
 
-// BUG 5 CORRIGIDO: renderPagination so monta o HTML.
-// O event listener fica no init(), fora daqui, para nao se acumular a cada reload.
+// Calcula media e total a partir do array de ratings vindo do Supabase.
+function calcRatingSummary(ratings = []) {
+    if (!ratings.length) return { average: null, count: 0 };
+    const sum = ratings.reduce((acc, r) => acc + r.rating, 0);
+    const average = sum / ratings.length;
+    return {
+        average,                             // numero puro ex: 3.7  (usado no calculo das estrelas)
+        averageDisplay: average.toFixed(1),  // string para exibir  ex: "3.7"
+        count: ratings.length,
+    };
+}
+
+// Gera o HTML das 5 estrelas com suporte a fracao (ex: 3.7).
+//
+// Tecnica: cada estrela e um caractere Unicode colorido com um gradiente
+// linear que vai de amarelo para cinza no ponto exato da fracao.
+// background-clip:text aplica o gradiente somente no texto da estrela.
+//
+// Exemplo com average = 3.7:
+//   estrela 1 -> fill = min(1, max(0, 3.7 - 0)) = 1.0 -> 100% amarela
+//   estrela 2 -> fill = min(1, max(0, 3.7 - 1)) = 1.0 -> 100% amarela
+//   estrela 3 -> fill = min(1, max(0, 3.7 - 2)) = 1.0 -> 100% amarela
+//   estrela 4 -> fill = min(1, max(0, 3.7 - 3)) = 0.7 ->  70% amarela
+//   estrela 5 -> fill = min(1, max(0, 3.7 - 4)) = 0.0 ->   0% amarela (cinza)
+//
+// Parametros:
+//   average -> numero com a media (ex: 3.7). null = sem avaliacoes (todas cinzas).
+//   size    -> tamanho da fonte (ex: "1rem", "0.9rem", "2rem")
+function buildStarsHtml(average, size = "1rem") {
+    const avg = average ?? 0;
+
+    return [1, 2, 3, 4, 5]
+        .map((n) => {
+            const fill = Math.min(1, Math.max(0, avg - (n - 1))) * 100;
+
+            return `<span style="
+                font-size: ${size};
+                background: linear-gradient(to right, #f5a623 ${fill}%, #ccc ${fill}%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+                line-height: 1;
+            ">&#9733;</span>`;
+        })
+        .join("");
+}
+
+// Gera o bloco completo de rating para cada card da listagem.
+// Retorna HTML pronto — NAO use escapeHtml ao inserir no template.
+function buildRatingHtml(ratings = []) {
+    const { average, averageDisplay, count } = calcRatingSummary(ratings);
+
+    if (count === 0) {
+        return `<span class="muted" style="font-size:0.8rem;">Sem avaliacoes</span>`;
+    }
+
+    const stars = buildStarsHtml(average, "0.9rem");
+
+    return `
+        <span style="display:inline-flex; align-items:center; gap:4px; font-size:0.8rem;">
+            ${stars}
+            <span class="muted">${averageDisplay} (${count})</span>
+        </span>
+    `;
+}
+
+function updateStarColors(activeRating) {
+    const stars = document.querySelectorAll(".star");
+    stars.forEach((star) => {
+        const val = Number(star.dataset.value);
+        star.style.color = val <= activeRating ? "#f5a623" : "#ccc";
+    });
+}
+
 function renderPagination(total, perPage, currentPage) {
     const paginationEl = document.querySelector("#pagination");
 
@@ -225,15 +296,21 @@ function renderServices(viewServices, favoriteSet, myServiceSet, myInactiveSet) 
             const isInactive = myInactiveSet.has(service.id);
             const btnLabel = isFav ? "Unsave" : "Save";
 
+            // buildRatingHtml retorna HTML pronto.
+            // NAO passe por escapeHtml — isso converteria as tags em texto visivel.
+            const ratingHtml = buildRatingHtml(service.service_ratings ?? []);
+
             return `
                 <div class="card" style="margin-bottom:12px;">
                     <div style="display:flex; justify-content:space-between; gap:12px;">
                         <div>
-                            <h3 style="margin:0 0 6px 0;">
+                            <h3 style="margin:0 0 4px 0;">
                                 <a href="/serviceDetails.html?id=${service.id}">
                                     ${escapeHtml(service.title)}
                                 </a>
                             </h3>
+
+                            <div style="margin-bottom:6px;">${ratingHtml}</div>
 
                             <div class="muted">
                                 ${escapeHtml(service.category)}
@@ -301,10 +378,6 @@ async function reload() {
         sortBy: sortSel.value || "",
     };
 
-    // BUG 1+2+3 CORRIGIDOS:
-    // - pages passa perPageState e currentPageState corretamente
-    // - fetchServices retorna { data, total } -- desestruturamos aqui
-    // - total fica disponivel para o renderPagination logo abaixo
     const pages = {
         perPage: perPageState,
         currentPage: currentPageState,
@@ -354,11 +427,9 @@ async function init() {
     categorySel.addEventListener("change", reload);
     sortSel.addEventListener("change", reload);
 
-    // BUG 4 CORRIGIDO: era perPageSel (inexistente) -> paginationSel
-    //                  e faltava o ) para fechar o addEventListener
     paginationSel.addEventListener("change", () => {
-        perPageState = paginationSel.value;  // "2", "5", "10" ou "All"
-        currentPageState = 1;                // volta pro inicio ao mudar itens por pagina
+        perPageState = paginationSel.value;
+        currentPageState = 1;
         reload();
     });
 
@@ -370,13 +441,13 @@ async function init() {
         filterText.value = "";
         sortSel.value = "Newest";
         paginationSel.value = "2";
-        perPageState = 2;       // reseta o estado tambem, nao so o dropdown
+        perPageState = 2;
         currentPageState = 1;
         reload();
     });
 
     filterBtn.addEventListener("click", () => {
-        currentPageState = 1;   // ao aplicar filtro, volta pra pagina 1
+        currentPageState = 1;
         reload();
     });
 
@@ -399,8 +470,6 @@ async function init() {
         reload();
     });
 
-    // BUG 5 CORRIGIDO: listener da paginacao fica aqui no init(),
-    // registrado uma unica vez -- nunca se acumula.
     const paginationEl = document.querySelector("#pagination");
     paginationEl.addEventListener("click", (e) => {
         const btn = e.target.closest(".pageBtn");
