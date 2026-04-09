@@ -1,10 +1,23 @@
-import { supabase } from "./supabaseClient.js";
-import { requireAuthOrRedirect } from "./guard.js";
-import { signOut } from "./auth.js";
+// ============================================================
+// service-actions.js  (serviceNew.html + serviceEdit.html)
+//
+// Responsabilidade: orquestrar o formulário de criar/editar serviço.
+//
+// O que mudou em relação ao original:
+//   ✅ Não tem mais nenhuma função que fala com o Supabase
+//   ✅ Toda comunicação com o banco vem de services.api.js
+//   ✅ escapeHTML veio de utils/string.utils.js (sem duplicação)
+//   ✅ saveRating recebe userId como parâmetro (sem depender de estado global)
+// ============================================================
 
-// --------------------
-// Elementos da página
-// --------------------
+import { requireAuthOrRedirect } from "../guard.js";
+import { signOut } from "../auth.js";
+
+// 💡 Importa APENAS as funções que este arquivo realmente usa
+import { fetchCategories, fetchServiceById, createService, updateService } from "../services/services.api.js";
+import { escapeHTML } from "../utils/string.utils.js";
+
+// ─── Elementos da página ─────────────────────────────────────
 const form = document.querySelector("#serviceForm");
 const msg = document.querySelector("#msg");
 const pageTitle = document.querySelector("#pageTitle");
@@ -18,27 +31,14 @@ const cityInput = document.querySelector("#serviceCity");
 const countryInput = document.querySelector("#serviceCountry");
 const isActiveInput = document.querySelector("#serviceIsActive");
 
-// --------------------
-// Estado local
-// --------------------
+// ─── Estado local ─────────────────────────────────────────────
 let userIdState = null;
 let serviceIdState = null;
 let isEditModeState = false;
 
-// --------------------
-// Helpers
-// --------------------
+// ─── Helpers de UI ───────────────────────────────────────────
 function setMsg(text = "") {
     msg.textContent = text;
-}
-
-function escapeHtml(str) {
-    return String(str ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
 }
 
 function getServiceIdFromUrl() {
@@ -66,10 +66,11 @@ function validateForm(serviceData) {
 }
 
 function fillCategoryDropdown(categories) {
+    // escapeHTML importado de utils — não duplicado aqui
     categorySel.innerHTML = categories
         .map((category) => {
-            const safeValue = escapeHtml(category);
-            return `<option value="${safeValue}">${safeValue}</option>`;
+            const safe = escapeHTML(category);
+            return `<option value="${safe}">${safe}</option>`;
         })
         .join("");
 }
@@ -83,64 +84,7 @@ function populateForm(service) {
     isActiveInput.checked = Boolean(service.is_active);
 }
 
-// --------------------
-// Data access
-// --------------------
-async function fetchCategories() {
-    const { data, error } = await supabase
-        .from("services")
-        .select("category")
-        .eq("is_active", true);
-
-    if (error) throw error;
-
-    const unique = [...new Set((data ?? []).map((row) => row.category).filter(Boolean))];
-    unique.sort((a, b) => a.localeCompare(b));
-
-    if (!unique.length) {
-        throw new Error("No categories found.");
-    }
-
-    return unique;
-}
-
-async function fetchServiceById(serviceId) {
-    const { data, error } = await supabase
-        .from("services")
-        .select("id, owner_id, title, description, category, city, country, is_active")
-        .eq("id", serviceId)
-        .single();
-
-    if (error) throw error;
-    return data;
-}
-
-async function createService(serviceData) {
-    const { data, error } = await supabase
-        .from("services")
-        .insert([serviceData])
-        .select()
-        .single();
-
-    if (error) throw error;
-    return data;
-}
-
-async function updateService(serviceId, serviceData) {
-    const { data, error } = await supabase
-        .from("services")
-        .update(serviceData)
-        .eq("id", serviceId)
-        .select()
-        .single();
-
-    if (error) throw error;
-    return data;
-}
-
-// --------------------
-// Submit
-// --------------------
+// ─── Evento de submit ─────────────────────────────────────────
 form.addEventListener("submit", async (e) => {
     e.preventDefault();
     setMsg("");
@@ -151,13 +95,12 @@ form.addEventListener("submit", async (e) => {
         validateForm(serviceData);
 
         if (isEditModeState) {
-            const updated = await updateService(serviceIdState, serviceData);
-            console.log("Updated service:", updated);
+            // updateService vem de services.api.js — sem supabase aqui
+            await updateService(serviceIdState, serviceData);
             setMsg("Service updated successfully.");
             window.location.replace(`/serviceDetails.html?id=${serviceIdState}`);
         } else {
             const created = await createService(serviceData);
-            console.log("Created service:", created);
             setMsg("Service created successfully.");
             window.location.replace(`/serviceDetails.html?id=${created.id}`);
         }
@@ -169,9 +112,7 @@ form.addEventListener("submit", async (e) => {
     }
 });
 
-// --------------------
-// Init
-// --------------------
+// ─── Init ────────────────────────────────────────────────────
 async function init() {
     const session = await requireAuthOrRedirect();
     if (!session) return;
@@ -182,7 +123,6 @@ async function init() {
 
     logoutLink.addEventListener("click", async (e) => {
         e.preventDefault();
-
         try {
             await signOut();
             window.location.replace("/login.html");
@@ -194,6 +134,7 @@ async function init() {
 
     setMsg("Loading...");
 
+    // fetchCategories vem de services.api.js
     const categories = await fetchCategories();
     fillCategoryDropdown(categories);
 
