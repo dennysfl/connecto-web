@@ -1,4 +1,4 @@
-import { supabase } from "./supabaseClient.js";
+/*import { supabase } from "./supabaseClient.js";
 import { requireAuthOrRedirect } from "./guard.js";
 import { signOut } from "./auth.js";
 
@@ -535,3 +535,4 @@ init().catch((err) => {
     console.error(err);
     setMsg(err?.message ?? "Unexpected error");
 });
+*/
