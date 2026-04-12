@@ -39,7 +39,7 @@ export async function fetchServices(filters = {}, orders = {}, pages = {}) {
     let q = supabase
         .from("services")
         .select(
-            "id, title, description, category, city, country, is_active, owner_id, created_at, service_ratings(rating)",
+            "id, title, description, subcategories!inner (name, categories!inner (name)), city, country, is_active, owner_id, created_at, service_ratings(rating)",
             { count: "exact" }
         )
         .eq("is_active", isActiveFilter);
@@ -51,7 +51,8 @@ export async function fetchServices(filters = {}, orders = {}, pages = {}) {
 
     // Filtros opcionais
     if (filters.onlyInactive) q = q.eq("owner_id", filters.userId);
-    if (filters.category) q = q.eq("category", filters.category);
+    if (filters.category) q = q.eq("subcategories.categories.id", filters.category);
+    if (filters.subcategory) q = q.eq("subcategory_id", filters.subcategory);
     if (filters.filterDescription) {
         q = q.or(
             `title.ilike.%${filters.filterDescription}%,description.ilike.%${filters.filterDescription}%`
@@ -82,7 +83,26 @@ export async function fetchServices(filters = {}, orders = {}, pages = {}) {
 export async function fetchServiceById(serviceId) {
     const { data, error } = await supabase
         .from("services")
-        .select("id, owner_id, title, description, category, city, country, is_active, created_at")
+        .select(`
+            id,
+            owner_id,
+            title,
+            description,
+            subcategory_id,
+            city,
+            country,
+            is_active,
+            created_at,
+            subcategories!inner (
+                id,
+                name,
+                category_id,
+                categories!inner (
+                    id,
+                    name
+                )
+            )
+        `)
         .eq("id", serviceId)
         .single();
 
@@ -98,21 +118,40 @@ export async function fetchServiceById(serviceId) {
  */
 export async function fetchCategories() {
     const { data, error } = await supabase
-        .from("services")
-        .select("category")
-        .eq("is_active", true);
+        .from("categories")
+        .select("id, name")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true });
 
     if (error) throw error;
 
-    const unique = [...new Set((data ?? []).map((row) => row.category).filter(Boolean))];
-    unique.sort((a, b) => a.localeCompare(b));
-    return unique;
+    return data ?? [];
+}
+
+export async function fetchSubCategories(categoryId) {
+    let q = supabase
+        .from("subcategories")
+        .select("id, name")
+        .eq("is_active", true);
+
+    if (categoryId) {
+        q = q.eq("category_id", categoryId);
+    } else {
+        return [];
+    }
+
+    q = q.order("sort_order", { ascending: true });
+
+    const { data, error } = await q;
+
+    if (error) throw error;
+    return data ?? [];
 }
 
 /**
  * Cria um novo serviço.
  *
- * @param {object} serviceData - { title, description, category, city, country, is_active }
+ * @param {object} serviceData - { title, description, subcategory_id, city, country, is_active }
  * @returns {object} serviço criado (com o id gerado pelo banco)
  */
 export async function createService(serviceData) {
