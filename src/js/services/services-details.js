@@ -58,9 +58,10 @@ function renderServiceDetails(service, currentUserId) {
         <h2 style="margin-top:0;">${escapeHTML(service.title)}</h2>
 
         <div class="muted">
-            ${escapeHTML(service.category)}
-            · ${escapeHTML(service.city ?? "")}
-            ${escapeHTML(service.country ?? "")}
+            ${escapeHTML(service.subcategories.categories.name ?? "")}
+            · ${escapeHTML(service.subcategories.name ?? "")}
+            <br>${escapeHTML(service.city ?? "")}
+            (${escapeHTML(service.country ?? "")})
         </div>
 
         <p style="margin-top:12px;">${escapeHTML(service.description ?? "")}</p>

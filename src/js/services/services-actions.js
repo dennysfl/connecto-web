@@ -14,7 +14,7 @@ import { requireAuthOrRedirect } from "../guard.js";
 import { signOut } from "../auth.js";
 
 // 💡 Importa APENAS as funções que este arquivo realmente usa
-import { fetchCategories, fetchServiceById, createService, updateService } from "../services/services.api.js";
+import { fetchCategories, fetchSubCategories, fetchServiceById, createService, updateService } from "../services/services.api.js";
 import { escapeHTML } from "../utils/string.utils.js";
 
 // ─── Elementos da página ─────────────────────────────────────
@@ -27,6 +27,7 @@ const saveBtn = document.querySelector("#saveBtn");
 const titleInput = document.querySelector("#serviceTitle");
 const descInput = document.querySelector("#serviceDesc");
 const categorySel = document.querySelector("#serviceCate");
+const subCategorySel = document.querySelector("#serviceSubCate");
 const cityInput = document.querySelector("#serviceCity");
 const countryInput = document.querySelector("#serviceCountry");
 const isActiveInput = document.querySelector("#serviceIsActive");
@@ -50,7 +51,7 @@ function getFormData() {
     return {
         title: titleInput.value.trim(),
         description: descInput.value.trim(),
-        category: categorySel.value.trim(),
+        subcategory_id: subCategorySel.value || null,
         city: cityInput.value.trim(),
         country: countryInput.value.trim(),
         is_active: isActiveInput.checked,
@@ -60,28 +61,45 @@ function getFormData() {
 function validateForm(serviceData) {
     if (!serviceData.title) throw new Error("Title is required.");
     if (!serviceData.description) throw new Error("Description is required.");
-    if (!serviceData.category) throw new Error("Category is required.");
+    if (!categorySel.value) throw new Error("Category is required.");
+    if (!serviceData.subcategory_id) throw new Error("Sub Category is required.");
     if (!serviceData.city) throw new Error("City is required.");
     if (!serviceData.country) throw new Error("Country is required.");
 }
 
 function fillCategoryDropdown(categories) {
-    // escapeHTML importado de utils — não duplicado aqui
-    categorySel.innerHTML = categories
-        .map((category) => {
-            const safe = escapeHTML(category);
-            return `<option value="${safe}">${safe}</option>`;
-        })
+    categorySel.innerHTML = `<option value="">Select a category</option>`;
+
+    const options = categories
+        .map((c) => `<option value="${c.id}">${escapeHTML(c.name)}</option>`)
         .join("");
+
+    categorySel.insertAdjacentHTML("beforeend", options);
 }
 
-function populateForm(service) {
+function fillSubCategoryDropdown(subcategories) {
+    subCategorySel.innerHTML = `<option value="">Select a subcategory</option>`;
+
+    const options = subcategories
+        .map((c) => `<option value="${c.id}">${escapeHTML(c.name)}</option>`)
+        .join("");
+
+    subCategorySel.insertAdjacentHTML("beforeend", options);
+}
+
+async function populateForm(service) {
     titleInput.value = service.title ?? "";
     descInput.value = service.description ?? "";
-    categorySel.value = service.category ?? "";
     cityInput.value = service.city ?? "";
     countryInput.value = service.country ?? "";
     isActiveInput.checked = Boolean(service.is_active);
+
+    const categoryId = service.subcategories?.category_id ?? "";
+    const subcategoryId = service.subcategory_id ?? "";
+
+    categorySel.value = categoryId;
+
+    await reloadSubCate(categoryId, subcategoryId);
 }
 
 // ─── Evento de submit ─────────────────────────────────────────
@@ -93,6 +111,8 @@ form.addEventListener("submit", async (e) => {
     try {
         const serviceData = getFormData();
         validateForm(serviceData);
+
+        console.log(serviceData);
 
         if (isEditModeState) {
             // updateService vem de services.api.js — sem supabase aqui
@@ -112,6 +132,19 @@ form.addEventListener("submit", async (e) => {
     }
 });
 
+async function reloadSubCate(categoryId, selectedSubcategoryId = "") {
+    if (!categoryId) {
+        fillSubCategoryDropdown([]);
+        return;
+    }
+
+    const subcategories = await fetchSubCategories(categoryId);
+    fillSubCategoryDropdown(subcategories);
+
+    if (selectedSubcategoryId) {
+        subCategorySel.value = selectedSubcategoryId;
+    }
+}
 // ─── Init ────────────────────────────────────────────────────
 async function init() {
     const session = await requireAuthOrRedirect();
@@ -134,9 +167,13 @@ async function init() {
 
     setMsg("Loading...");
 
-    // fetchCategories vem de services.api.js
     const categories = await fetchCategories();
     fillCategoryDropdown(categories);
+    fillSubCategoryDropdown([]);
+
+    categorySel.addEventListener("change", async () => {
+        await reloadSubCate(categorySel.value);
+    });
 
     if (isEditModeState) {
         pageTitle.textContent = "Edit Service";
@@ -147,7 +184,7 @@ async function init() {
             throw new Error("You do not have permission to edit this service.");
         }
 
-        populateForm(service);
+        await populateForm(service);
     } else {
         pageTitle.textContent = "New Service";
     }

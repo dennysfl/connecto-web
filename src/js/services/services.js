@@ -14,6 +14,7 @@ import { signOut } from "../auth.js";
 import {
     fetchServices,
     fetchCategories,
+    fetchSubCategories,
     fetchFavorites,
     fetchMyServices,
     fetchMyInactive,
@@ -28,6 +29,7 @@ const msg = document.querySelector("#msg");
 const listEl = document.querySelector("#servicesList");
 const logoutLink = document.querySelector("#logoutLink");
 const categorySel = document.querySelector("#categoryFilter");
+const subCategorySel = document.querySelector("#subcategoryFilter");
 const sortSel = document.querySelector("#sortService");
 const paginationSel = document.querySelector("#paginationService");
 const filterText = document.querySelector("#searchText");
@@ -55,10 +57,23 @@ function setMsg(text = "") {
 }
 
 function fillCategoryDropdown(categories) {
+    categorySel.innerHTML = `<option value="">All</option>`;
+
     const options = categories
-        .map((c) => `<option value="${escapeHTML(c)}">${escapeHTML(c)}</option>`)
+        .map((c) => `<option value="${c.id}">${escapeHTML(c.name)}</option>`)
         .join("");
+
     categorySel.insertAdjacentHTML("beforeend", options);
+}
+
+function fillSubCategoryDropdown(subcategories) {
+    subCategorySel.innerHTML = `<option value="">All</option>`;
+
+    const options = subcategories
+        .map((c) => `<option value="${c.id}">${escapeHTML(c.name)}</option>`)
+        .join("");
+
+    subCategorySel.insertAdjacentHTML("beforeend", options);
 }
 
 function getViewServices() {
@@ -162,9 +177,10 @@ function renderServices(services, favoriteSet, myServiceSet, myInactiveSet) {
                             <div style="margin-bottom:6px;">${ratingHtml}</div>
 
                             <div class="muted">
-                                ${escapeHTML(service.category)}
-                                · ${escapeHTML(service.city ?? "")}
-                                ${escapeHTML(service.country ?? "")}
+                                ${escapeHTML(service.subcategories.categories.name ?? "")}
+                                · ${escapeHTML(service.subcategories.name ?? "")}
+                                <br>${escapeHTML(service.city ?? "")}
+                                (${escapeHTML(service.country ?? "")})
                                 ${isMine ? "· My service" : ""}
                                 ${isInactive ? "· <strong>Inactive</strong>" : ""}
                             </div>
@@ -217,6 +233,7 @@ async function reload() {
 
     const filters = {
         category: categorySel.value || "",
+        subcategory: subCategorySel.value || "",
         onlyInactive: onlyMyInactive.checked,
         filterDescription: filterText.value.trim() || "",
         userId: userIdState, // necessário para o filtro onlyInactive
@@ -224,6 +241,9 @@ async function reload() {
 
     const orderBy = { sortBy: sortSel.value || "" };
     const pages = { perPage: perPageState, currentPage: currentPageState };
+
+    const subcategories = await fetchSubCategories(filters.category);
+    fillSubCategoryDropdown(subcategories);
 
     // Busca tudo em paralelo — mais rápido que sequencial
     const [{ data: services, total }, favoriteSet, myServiceSet, myInactiveSet] =
@@ -265,7 +285,11 @@ async function init() {
     const categories = await fetchCategories();
     fillCategoryDropdown(categories);
 
+    const subcategories = await fetchSubCategories(null);
+    fillSubCategoryDropdown(subcategories);
+
     categorySel.addEventListener("change", reload);
+    subCategorySel.addEventListener("change", reload);
     sortSel.addEventListener("change", reload);
 
     paginationSel.addEventListener("change", () => {
@@ -276,6 +300,7 @@ async function init() {
 
     clearBtn.addEventListener("click", () => {
         categorySel.value = "";
+        subCategorySel.value = "";
         onlyFavsChk.checked = false;
         onlyMyServicesChk.checked = false;
         onlyMyInactive.checked = false;
