@@ -13,64 +13,104 @@
 
 import { supabase } from "../supabaseClient.js";
 
-// ─── SERVICES ────────────────────────────────────────────────
+// ─── HELPERS INTERNOS ────────────────────────────────────────
+
 /**
- * Busca a lista de serviços com suporte a filtros, ordenação e paginação.
+ * Aplica os filtros em uma query Supabase.
+ * Extraído como função separada para não duplicar lógica entre
+ * fetchServices (que traz dados) e a contagem total.
  *
- * @param {object} filters
- * @param {string} filters.category        - filtra por categoria exata
- * @param {boolean} filters.onlyInactive   - se true, busca apenas inativos do próprio user
- * @param {string} filters.filterDescription - texto livre para buscar em title/description
- * @param {string} filters.userId          - necessário quando onlyInactive = true
+ * ⭐ BOA PRÁTICA: "Don't Repeat Yourself" (DRY).
+ * Se o filtro mudar, você altera só aqui — não em dois lugares.
  *
- * @param {object} orders
- * @param {string} orders.sortBy           - "Newest" | "Oldest" | "AZ"
- *
- * @param {object} pages
- * @param {number|string} pages.perPage    - número de itens por página ou "All"
- * @param {number} pages.currentPage       - página atual (começa em 1)
- *
- * @returns {{ data: Array, total: number }}
+ * @param {object} q       - query Supabase já iniciada
+ * @param {object} filters - os mesmos filtros que vêm da página
+ * @returns query com filtros aplicados
  */
-export async function fetchServices(filters = {}, orders = {}, pages = {}) {
-    const isActiveFilter = filters.onlyInactive ? false : true;
+function applyFilters(q, filters = {}) {
+    const isActive = filters.onlyInactive ? false : true;
 
-    // Monta a query base — sempre filtra por is_active
-    let q = supabase
-        .from("services")
-        .select(
-            "id, title, description, subcategories!inner (name, categories!inner (name)), city, country, is_active, owner_id, created_at, service_ratings(rating)",
-            { count: "exact" }
-        )
-        .eq("is_active", isActiveFilter);
+    q = q.eq("is_active", isActive);
 
-    // Ordenação
-    if (orders.sortBy === "Newest") q = q.order("created_at", { ascending: false });
-    else if (orders.sortBy === "Oldest") q = q.order("created_at", { ascending: true });
-    else if (orders.sortBy === "AZ") q = q.order("title", { ascending: true });
+    if (filters.onlyInactive && filters.userId) {
+        q = q.eq("owner_id", filters.userId);
+    }
 
-    // Filtros opcionais
-    if (filters.onlyInactive) q = q.eq("owner_id", filters.userId);
-    if (filters.category) q = q.eq("subcategories.categories.id", filters.category);
-    if (filters.subcategory) q = q.eq("subcategory_id", filters.subcategory);
+    if (filters.category) {
+        q = q.eq("subcategories.categories.id", filters.category);
+    }
+
+    if (filters.subcategory) {
+        q = q.eq("subcategory_id", filters.subcategory);
+    }
+
     if (filters.filterDescription) {
         q = q.or(
             `title.ilike.%${filters.filterDescription}%,description.ilike.%${filters.filterDescription}%`
         );
     }
 
-    // Paginação — só aplica range se não for "All"
-    if (pages.perPage !== "All") {
-        const perPage = Number(pages.perPage);
-        const from = (pages.currentPage - 1) * perPage;
-        const to = from + perPage - 1;
-        q = q.range(from, to);
+    return q;
+}
+
+// ─── SERVICES ────────────────────────────────────────────────
+
+/**
+ * Busca a lista de serviços com suporte a filtros, ordenação e paginação Load More.
+ *
+ * ⭐ O QUE MUDOU em relação à versão anterior:
+ *   - O terceiro parâmetro era `pages { perPage, currentPage }` (paginação por página).
+ *   - Agora é `{ from, to }` — índices diretos que o hook usePagination calcula.
+ *   - O count agora aplica os mesmos filtros, então o total exibido é sempre correto.
+ *
+ * @param {object} filters
+ * @param {string}  filters.category          - filtra por categoria (id)
+ * @param {boolean} filters.onlyInactive      - se true, busca apenas inativos do próprio user
+ * @param {string}  filters.filterDescription - texto livre para buscar em title/description
+ * @param {string}  filters.userId            - necessário quando onlyInactive = true
+ *
+ * @param {object} orders
+ * @param {string}  orders.sortBy             - "Newest" | "Oldest" | "AZ"
+ *
+ * @param {object} range
+ * @param {number}  range.from                - índice inicial (ex: 0, 10, 20...)
+ * @param {number}  range.to                  - índice final   (ex: 9, 19, 29...)
+ *
+ * @returns {{ data: Array, count: number }}
+ *   Retorna `count` (não `total`) para o hook usePagination receber corretamente.
+ */
+export async function fetchServices(filters = {}, orders = {}, range = {}) {
+
+    // ── 1. Query principal: busca os dados paginados ──────────
+    let q = supabase
+        .from("services")
+        .select(
+            "id, title, description, subcategories!inner (name, categories!inner (name)), city, country, is_active, owner_id, created_at, service_ratings(rating)",
+            // count: 'exact' aqui junto com o select de dados
+            { count: "exact" }
+        );
+
+    // Aplica os filtros (função reutilizável definida acima)
+    q = applyFilters(q, filters);
+
+    // Ordenação
+    if (orders.sortBy === "Newest") q = q.order("created_at", { ascending: false });
+    else if (orders.sortBy === "Oldest") q = q.order("created_at", { ascending: true });
+    else if (orders.sortBy === "AZ") q = q.order("title", { ascending: true });
+
+    // Paginação: aplica o range que o hook calculou
+    // from=0, to=9  → primeiros 10 itens
+    // from=10, to=19 → próximos 10 itens (Load More)
+    if (range.from !== undefined && range.to !== undefined) {
+        q = q.range(range.from, range.to);
     }
 
-    const { data, error, count } = await q;
+    const { data, count, error } = await q;
+
     if (error) throw error;
 
-    return { data: data ?? [], total: count ?? 0 };
+    // Retorna `count` diretamente — é o que o hook usePagination espera
+    return { data: data ?? [], count: count ?? 0 };
 }
 
 /**
@@ -114,7 +154,7 @@ export async function fetchServiceById(serviceId) {
  * Busca todas as categorias únicas de serviços ativos.
  * Usada para popular o dropdown de filtro/formulário.
  *
- * @returns {string[]} lista de categorias ordenadas A-Z
+ * @returns {object[]} lista de categorias ordenadas por sort_order
  */
 export async function fetchCategories() {
     const { data, error } = await supabase
@@ -124,7 +164,6 @@ export async function fetchCategories() {
         .order("sort_order", { ascending: true });
 
     if (error) throw error;
-
     return data ?? [];
 }
 
@@ -143,7 +182,6 @@ export async function fetchSubCategories(categoryId) {
     q = q.order("sort_order", { ascending: true });
 
     const { data, error } = await q;
-
     if (error) throw error;
     return data ?? [];
 }
