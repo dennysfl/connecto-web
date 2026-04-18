@@ -22,9 +22,10 @@
             <a href="/serviceNew.html">New Service</a>
         </div>
 
+        <!-- Filtros -->
         <div class="card" style="margin-bottom:12px;">
             <label for="searchText">Search</label>
-            <input id="searchText"></input>
+            <input id="searchText" />
 
             <label for="categoryFilter">Category</label>
             <select id="categoryFilter">
@@ -48,12 +49,14 @@
             </label>
         </div>
 
+        <!-- Contadores do topo -->
         <p class="muted">
             Saved: <strong id="savedCount">0</strong>
             | My Services: <strong id="totalMyServices">0</strong>
             | Total: <strong id="totalServices">0</strong>
         </p>
 
+        <!-- Ordenação -->
         <label for="sortService">Sort by:</label>
         <select id="sortService">
             <option value="Newest">Newest</option>
@@ -61,18 +64,39 @@
             <option value="AZ">A-Z</option>
         </select>
 
-        <label for="paginationService">Show Results:</label>
-        <select id="paginationService">
-            <option value="2">2</option>
-            <option value="5">5</option>
-            <option value="10">10</option>
-            <option value="All">All</option>
-        </select>
+        <!-- ⭐ Contador Load More: "Mostrando X de Y serviços" -->
+        <p class="muted" style="margin-top: 12px;">
+            <span id="showingCount">Mostrando 0 de 0 serviços</span>
+        </p>
 
         <p id="msg" class="msg"></p>
+
+        <!-- Botões de navegação rápida -->
+        <div style="display:flex; gap:12px;">
+            <button id="scrollBottomBtn" type="button" title="Go to bottom">
+                ↓ Bottom
+            </button>
+        </div>
+        <br>
+        <!-- Lista de serviços (Load More acumula itens aqui) -->
         <div id="servicesList"></div>
 
-        <div id="pagination" style="display:flex; gap:12px; align-items:center; margin-top:16px;"></div>
+        <!-- ⭐ Botão Load More + botões de scroll -->
+        <div style="display:flex; flex-direction:column; align-items:center; gap:12px; margin-top:24px;">
+
+            <!-- Load More: visível só quando há mais para carregar (controlado pelo JS) -->
+            <button id="loadMoreBtn" type="button" style="display:none;">
+                Load More
+            </button>
+
+            <!-- Botões de navegação rápida -->
+            <div style="display:flex; gap:12px;">
+                <button id="scrollTopBtn" type="button" title="Back to top">
+                    ↑ Top
+                </button>
+            </div>
+        </div>
+
     </main>
 
     <script type="module" src="./src/js/services/services.js"></script>
