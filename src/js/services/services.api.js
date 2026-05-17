@@ -28,20 +28,28 @@ import { supabase } from "../supabaseClient.js";
  * @returns query com filtros aplicados
  */
 function applyFilters(q, filters = {}) {
-    const isActive = filters.onlyInactive ? false : true;
-
-    q = q.eq("is_active", isActive);
-
     if (filters.onlyInactive && filters.userId) {
-        q = q.eq("owner_id", filters.userId);
+        // Traz: todos os ativos  OU  os inativos do próprio usuário
+        q = q.or(
+            `is_active.eq.true,and(is_active.eq.false,owner_id.eq.${filters.userId})`
+        );
+    } else {
+        q = q.eq("is_active", true);
     }
 
-    if (filters.category) {
-        q = q.eq("subcategories.categories.id", filters.category);
+    if (filters.onlyFavoriteIds?.length) {
+        q = q.in("id", filters.onlyFavoriteIds);
+    }
+    if (filters.onlyMyServiceIds?.length) {
+        q = q.in("id", filters.onlyMyServiceIds);
     }
 
+    // Se subcategoria está selecionada, ela já implica a categoria —
+    // aplicar os dois filtros ao mesmo tempo conflita no join do Supabase.
     if (filters.subcategory) {
         q = q.eq("subcategory_id", filters.subcategory);
+    } else if (filters.category) {
+        q = q.eq("subcategories.categories.id", filters.category);
     }
 
     if (filters.filterDescription) {
@@ -73,8 +81,8 @@ function applyFilters(q, filters = {}) {
  * @param {string}  orders.sortBy             - "Newest" | "Oldest" | "AZ"
  *
  * @param {object} range
- * @param {number}  range.from                - índice inicial (ex: 0, 10, 20...)
- * @param {number}  range.to                  - índice final   (ex: 9, 19, 29...)
+ * @param {number} range.from                - índice inicial (ex: 0, 10, 20...)
+ * @param {number} range.to                  - índice final   (ex: 9, 19, 29...)
  *
  * @returns {{ data: Array, count: number }}
  *   Retorna `count` (não `total`) para o hook usePagination receber corretamente.
