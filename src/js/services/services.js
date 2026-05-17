@@ -10,6 +10,8 @@
 //   ✅ Botões de scroll ↑ Topo e ↓ Final
 //   ✅ Filtros e ordenação resetam a lista ao mudar (reload completo)
 //   ✅ Fetch paralelo mantido (mais rápido que sequencial)
+//   ✅ [NOVO] State persistence via sessionStorage — ao voltar do serviceDetails,
+//      os filtros, paginação e posição de scroll são restaurados automaticamente.
 // ============================================================
 
 import { requireAuthOrRedirect } from "../guard.js";
@@ -26,6 +28,11 @@ import {
     activateService
 } from "./services.api.js";
 import { escapeHTML } from "../utils/string.utils.js";
+
+// ─── Chave do sessionStorage ──────────────────────────────────
+// Usamos uma chave única para não colidir com outros estados
+// que você vai implementar em outras páginas (events, etc.)
+const STATE_KEY = "services_listing_state";
 
 // ─── Elementos da página ─────────────────────────────────────
 const msg = document.querySelector("#msg");
@@ -51,18 +58,16 @@ const scrollTopBtn = document.querySelector("#scrollTopBtn");
 const scrollBottomBtn = document.querySelector("#scrollBottomBtn");
 
 // ─── Estado de paginação Load More ───────────────────────────
-// Estas variáveis substituem currentPageState e perPageState.
-// Elas controlam quantos itens já foram carregados e quantos existem no total.
 const PAGE_SIZE = 5;   // quantos itens carregar por vez
 
 let paginationState = {
-    page: 0,         // próxima página a buscar (0 = primeira carga)
-    total: 0,         // total de registros no banco (com os filtros ativos)
-    loading: false,     // proteção contra cliques duplos
+    page: 0,
+    total: 0,
+    loading: false,
 }
 
 // ─── Estado de dados ──────────────────────────────────────────
-let servicesState = [];          // lista acumulada dos serviços carregados
+let servicesState = [];
 let favoriteSetState = new Set();
 let myServiceSetState = new Set();
 let myInactiveSetState = new Set();
@@ -92,20 +97,17 @@ function fillSubCategoryDropdown(subcategories) {
 
 function getViewServices() {
     let view = [...servicesState];
-    if (onlyMyInactive.checked) view = view.filter((s) => myInactiveSetState.has(s.id));
+    // "My Services" filtra client-side para mostrar apenas os do usuário logado
     if (onlyMyServicesChk.checked) view = view.filter((s) => myServiceSetState.has(s.id));
+    // "Only Favorites" filtra client-side para mostrar apenas favoritos
     if (onlyFavsChk.checked) view = view.filter((s) => favoriteSetState.has(s.id));
+    // "My Inactive": o backend já trouxe ativos + inativos do usuário — sem filtro extra aqui
     return view;
 }
 
 // ─── Contadores ───────────────────────────────────────────────
 
-/**
- * Atualiza os 3 contadores do topo (Saved, My Services, Total visível)
- * e o contador "Mostrando X de Y" da paginação Load More.
- */
 function updateCounters(viewServices) {
-    // Total visível na tela (após filtros de checkbox)
     totalServicesEl.textContent = viewServices.length;
 
     let savedInView = 0;
@@ -119,21 +121,12 @@ function updateCounters(viewServices) {
     savedCountEl.textContent = savedInView;
     myServicesEl.textContent = myServicesInView;
 
-    // ⭐ Contador Load More: "Mostrando X de Y serviços"
-    // servicesState.length = total já carregado e acumulado
-    // paginationState.total = total real no banco (com filtros)
     showingCountEl.textContent =
         `Mostrando ${servicesState.length} de ${paginationState.total} serviços`;
 }
 
 // ─── Botão Load More ─────────────────────────────────────────
 
-/**
- * Atualiza o estado visual do botão Load More.
- * - Se ainda há mais: mostra o botão habilitado
- * - Se está carregando: mostra botão desabilitado com texto de espera
- * - Se carregou tudo: esconde o botão
- */
 function updateLoadMoreBtn() {
     const hasMore = servicesState.length < paginationState.total;
 
@@ -149,7 +142,6 @@ function updateLoadMoreBtn() {
         loadMoreBtn.disabled = false;
         loadMoreBtn.textContent = "Load More";
     } else {
-        // Já carregou tudo — esconde o botão
         loadMoreBtn.style.display = "none";
     }
 }
@@ -193,16 +185,6 @@ function buildRatingHtml(ratings = []) {
 
 // ─── Renderização ─────────────────────────────────────────────
 
-/**
- * Renderiza um lote de services NOVOS no final da lista existente.
- *
- * ⭐ POR QUE insertAdjacentHTML em vez de innerHTML?
- * innerHTML = substitui tudo (apaga o que estava na tela).
- * insertAdjacentHTML("beforeend", ...) = ADICIONA no final, sem apagar nada.
- * Isso é o que cria o efeito "Load More" acumulando itens.
- *
- * @param {Array} newServices - apenas os services recém-carregados (não a lista toda)
- */
 function renderNewServices(newServices) {
     if (!newServices.length) return;
 
@@ -219,7 +201,7 @@ function renderNewServices(newServices) {
                     <div style="display:flex; justify-content:space-between; gap:12px;">
                         <div>
                             <h3 style="margin:0 0 4px 0;">
-                                <a href="/serviceDetails.html?id=${service.id}">
+                                <a class="serviceLink" href="/serviceDetails.html?id=${service.id}" data-service-id="${service.id}">
                                     ${escapeHTML(service.title)}
                                 </a>
                             </h3>
@@ -254,16 +236,78 @@ function renderNewServices(newServices) {
         })
         .join("");
 
-    // "beforeend" = insere APÓS o último filho — acumula sem apagar
     listEl.insertAdjacentHTML("beforeend", html);
+}
+
+// ─── SessionStorage: salvar e restaurar estado ────────────────
+
+/**
+ * Salva o estado atual (filtros + paginação + scroll) no sessionStorage.
+ * Chamado ANTES de navegar para o serviceDetails.
+ */
+function saveListingState() {
+    const state = {
+        // Filtros
+        searchText: filterText.value,
+        category: categorySel.value,
+        subcategory: subCategorySel.value,
+        sortBy: sortSel.value,
+        onlyFavs: onlyFavsChk.checked,
+        myServices: onlyMyServicesChk.checked,
+        myInactive: onlyMyInactive.checked,
+
+        // Paginação: quantas páginas foram carregadas
+        pagesLoaded: paginationState.page,
+        total: paginationState.total,
+
+        // Scroll: posição atual para restaurar depois
+        scrollY: window.scrollY,
+    };
+
+    sessionStorage.setItem(STATE_KEY, JSON.stringify(state));
+}
+
+/**
+ * Lê o estado salvo do sessionStorage.
+ * Retorna null se não houver nada salvo.
+ */
+function loadListingState() {
+    try {
+        const raw = sessionStorage.getItem(STATE_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Limpa o estado salvo.
+ * Chamado quando o usuário muda filtros manualmente (reload normal).
+ */
+function clearListingState() {
+    sessionStorage.removeItem(STATE_KEY);
+}
+
+/**
+ * Aplica os valores do estado salvo nos campos da tela.
+ * Só mexe nos dropdowns/checkboxes — o loadMore vai cuidar dos dados.
+ */
+async function applyRestoredFilters(state) {
+    filterText.value = state.searchText ?? "";
+    categorySel.value = state.category ?? "";
+    sortSel.value = state.sortBy ?? "Newest";
+    onlyFavsChk.checked = state.onlyFavs ?? false;
+    onlyMyServicesChk.checked = state.myServices ?? false;
+    onlyMyInactive.checked = state.myInactive ?? false;
+
+    // Recarrega as subcategorias para a categoria salva
+    const subcategories = await fetchSubCategories(state.category || null);
+    fillSubCategoryDropdown(subcategories);
+    subCategorySel.value = state.subcategory ?? "";
 }
 
 // ─── Lógica principal de Load More ───────────────────────────
 
-/**
- * Lê os filtros atuais da tela e retorna um objeto.
- * Centralizado aqui para não repetir em reload() e loadMore().
- */
 function getCurrentFilters() {
     return {
         category: categorySel.value || "",
@@ -271,6 +315,10 @@ function getCurrentFilters() {
         onlyInactive: onlyMyInactive.checked,
         filterDescription: filterText.value.trim() || "",
         userId: userIdState,
+
+        // Passa os IDs para filtrar no banco
+        onlyFavoriteIds: onlyFavsChk.checked ? [...favoriteSetState] : null,
+        onlyMyServiceIds: onlyMyServicesChk.checked ? [...myServiceSetState] : null,
     };
 }
 
@@ -278,34 +326,22 @@ function getCurrentOrders() {
     return { sortBy: sortSel.value || "Newest" };
 }
 
-/**
- * Carrega o próximo bloco de serviços e acumula na tela.
- * Chamado na primeira carga e a cada clique em "Load More".
- */
 async function loadMore() {
-    // Proteção: não carrega se já está em andamento
     if (paginationState.loading) return;
 
-    // Proteção: não carrega se já temos tudo
-    // (total > 0 evita bloquear a carga inicial quando total ainda é 0)
     const hasMore = servicesState.length < paginationState.total;
     if (!hasMore && paginationState.total > 0) return;
 
     paginationState.loading = true;
     updateLoadMoreBtn();
 
-    // Calcula os índices do próximo bloco
     const from = paginationState.page * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
 
     try {
-        // Busca em paralelo: services + sets auxiliares
-        // Na primeira carga (page 0) os sets são carregados juntos.
-        // Nas cargas seguintes, só fetchServices é chamado (os sets já estão em memória).
         let newServices, count;
 
         if (paginationState.page === 0) {
-            // Primeira carga: busca tudo em paralelo
             const [result, favoriteSet, myServiceSet, myInactiveSet] = await Promise.all([
                 fetchServices(getCurrentFilters(), getCurrentOrders(), { from, to }),
                 fetchFavorites(userIdState),
@@ -320,7 +356,6 @@ async function loadMore() {
             myInactiveSetState = myInactiveSet;
 
         } else {
-            // Load More: só busca os services novos (sets já estão atualizados)
             const result = await fetchServices(
                 getCurrentFilters(), getCurrentOrders(), { from, to }
             );
@@ -328,16 +363,10 @@ async function loadMore() {
             count = result.count;
         }
 
-        // Atualiza o total (importante na primeira carga)
         paginationState.total = count;
-
-        // Acumula os novos services no estado local
         servicesState = [...servicesState, ...newServices];
-
-        // Avança para a próxima página
         paginationState.page += 1;
 
-        // Renderiza só os NOVOS items (não re-renderiza toda a lista)
         renderNewServices(newServices);
 
     } catch (err) {
@@ -348,30 +377,62 @@ async function loadMore() {
         updateCounters(getViewServices());
         updateLoadMoreBtn();
 
-        // Esconde o "Loading..." inicial na primeira carga
         if (paginationState.page === 1) setMsg("");
     }
 }
 
 /**
- * Reload completo: chamado quando filtros ou ordenação mudam.
- * Limpa tudo e recomeça do zero.
+ * Re-renderiza a lista com base nos filtros client-side (onlyFavs, myServices).
+ * Não vai ao banco — trabalha com servicesState que já está em memória.
+ */
+function renderFilteredView() {
+    const view = getViewServices();
+    listEl.innerHTML = "";
+    if (view.length) {
+        renderNewServices(view);
+    }
+    updateCounters(view);
+}
+
+/**
+ * Reload completo: chamado quando filtros mudam manualmente.
+ * Limpa o estado salvo, pois o usuário está escolhendo novos filtros.
  */
 async function reload() {
-    // Limpa a tela
+    clearListingState(); // usuário mudou filtros = descarta o estado antigo
+
     listEl.innerHTML = "";
     setMsg("Loading...");
 
-    // Atualiza subcategorias quando a categoria muda
+    const previousSubcategory = subCategorySel.value;
     const subcategories = await fetchSubCategories(categorySel.value || null);
     fillSubCategoryDropdown(subcategories);
 
-    // Reseta o estado de paginação
+    // Restaura o valor selecionado se ainda existir no novo dropdown
+    // (ex: usuário mudou a subcategoria — não a categoria)
+    if (previousSubcategory && subcategories.some(s => s.id === previousSubcategory)) {
+        subCategorySel.value = previousSubcategory;
+    }
+
+    console.log(subcategories);
+
     servicesState = [];
     paginationState = { page: 0, total: 0, loading: false };
 
-    // Inicia do zero
     await loadMore();
+}
+
+/**
+ * Restauração de estado: carrega múltiplos "Load More" de uma vez
+ * para reconstruir exatamente quantas páginas o usuário tinha visto.
+ *
+ * Por exemplo: se o usuário tinha carregado 3 páginas (15 itens),
+ * este método chama loadMore() 3 vezes em sequência.
+ */
+async function restorePages(pagesLoaded) {
+    for (let i = 0; i < pagesLoaded; i++) {
+        await loadMore();
+    }
 }
 
 // ─── Init ─────────────────────────────────────────────────────
@@ -398,8 +459,6 @@ async function init() {
     fillCategoryDropdown(categories);
 
     // ── Listeners de filtros — todos chamam reload() ──────────
-    // reload() reseta a paginação e recomeça do zero
-
     categorySel.addEventListener("change", reload);
     subCategorySel.addEventListener("change", reload);
     sortSel.addEventListener("change", reload);
@@ -417,23 +476,9 @@ async function init() {
         reload();
     });
 
-    // Checkboxes de view filtram localmente (sem ir ao banco)
-    // Apenas re-renderizam o que já foi carregado
-    onlyFavsChk.addEventListener("change", () => {
-        updateCounters(getViewServices());
-    });
-
-    onlyMyServicesChk.addEventListener("change", () => {
-        updateCounters(getViewServices());
-    });
-
-    onlyMyInactive.addEventListener("change", () => {
-        if (onlyMyInactive.checked) {
-            onlyFavsChk.checked = false;
-            onlyMyServicesChk.checked = true;
-        }
-        reload();
-    });
+    onlyFavsChk.addEventListener("change", () => reload());
+    onlyMyServicesChk.addEventListener("change", () => reload());
+    onlyMyInactive.addEventListener("change", () => reload());
 
     // ── Botão Load More ───────────────────────────────────────
     loadMoreBtn.addEventListener("click", () => loadMore());
@@ -447,8 +492,17 @@ async function init() {
         window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
     });
 
-    // ── Ações nos cards (favoritos e ativar) ──────────────────
+    // ── Ações nos cards ───────────────────────────────────────
     listEl.addEventListener("click", async (e) => {
+
+        // ── Intercepta clique no link do serviço para salvar estado ANTES de navegar
+        const serviceLink = e.target.closest(".serviceLink");
+        if (serviceLink) {
+            e.preventDefault(); // segura a navegação por um instante
+            saveListingState(); // salva tudo no sessionStorage
+            window.location.href = serviceLink.href; // aí navega
+            return;
+        }
 
         // Botão Save / Unsave
         const favBtn = e.target.closest(".favBtn");
@@ -471,7 +525,6 @@ async function init() {
                     favBtn.textContent = "Unsave";
                     favBtn.dataset.isFav = "true";
                 }
-                // Atualiza só os contadores — não re-renderiza os cards
                 updateCounters(getViewServices());
             } catch (err) {
                 console.error(err);
@@ -493,7 +546,6 @@ async function init() {
 
             try {
                 await activateService(serviceId, userIdState);
-                // Reload completo para refletir o novo status
                 await reload();
                 setMsg("Service activated successfully.");
             } catch (err) {
@@ -504,8 +556,36 @@ async function init() {
         }
     });
 
-    // ── Carga inicial ─────────────────────────────────────────
-    await loadMore();
+    // ── Verifica se deve restaurar estado (voltou do serviceDetails) ──
+    const savedState = loadListingState();
+
+    if (savedState && savedState.pagesLoaded > 0) {
+        // Veio do serviceDetails — restaura filtros e recarrega as páginas
+        setMsg("Loading...");
+
+        await applyRestoredFilters(savedState);
+
+        // Limpa a lista antes de recarregar (evita duplicatas)
+        listEl.innerHTML = "";
+        servicesState = [];
+        paginationState = { page: 0, total: 0, loading: false };
+
+        // Recarrega todas as páginas que o usuário havia carregado
+        await restorePages(savedState.pagesLoaded);
+
+        // Restaura a posição de scroll após tudo renderizado
+        // Usamos requestAnimationFrame para garantir que o DOM já foi pintado
+        requestAnimationFrame(() => {
+            window.scrollTo({ top: savedState.scrollY ?? 0, behavior: "instant" });
+        });
+
+        // Limpa o estado — próxima visita será carga normal
+        clearListingState();
+
+    } else {
+        // Carga normal (primeira visita ou usuário veio de outro lugar)
+        await loadMore();
+    }
 }
 
 init().catch((err) => {
