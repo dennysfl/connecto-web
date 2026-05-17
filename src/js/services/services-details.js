@@ -1,29 +1,27 @@
 // ============================================================
-// service-details.js  (serviceDetails.html)
+// services-details.js  (serviceDetails.html)
 //
 // Responsabilidade: orquestrar a tela de detalhes do serviço,
 // incluindo comentários e ratings.
 //
-// O que mudou em relação ao original:
-//   ✅ Nenhuma função de fetch/supabase aqui
-//   ✅ saveRating recebe userId como parâmetro (sem estado global na api)
-//   ✅ escapeHTML vem de utils
+// O que mudou nesta versão:
+//   ✅ Todo HTML extraído para services-render.js
+//   ✅ renderServiceDetails, renderCommentsList, renderRatingSection
+//      agora são importados — zero HTML inline aqui
+//   ✅ renderCommentForm permanece aqui: é um formulário com estado
+//      (aberto/fechado), não um card de dados
 // ============================================================
 
 import { requireAuthOrRedirect } from "../guard.js";
 import { signOut } from "../auth.js";
 import { fetchServiceById, deleteService } from "./services.api.js";
+import { fetchComments, createComment, deleteComment } from "./services-comments.api.js";
+import { fetchMyRating, fetchRatingSummary, saveRating } from "./services-ratings.api.js";
 import {
-    fetchComments,
-    createComment,
-    deleteComment
-} from "./services-comments.api.js";
-import {
-    fetchMyRating,
-    fetchRatingSummary,
-    saveRating
-} from "./services-ratings.api.js";
-import { escapeHTML } from "../utils/string.utils.js";
+    renderServiceDetails,
+    renderCommentsList,
+    renderRatingSection,
+} from "./services-render.js";  // ← NOVO
 
 // ─── Elementos da página ─────────────────────────────────────
 const msg = document.querySelector("#msg");
@@ -31,6 +29,7 @@ const msgCom = document.querySelector("#msgCom");
 const detailsEl = document.querySelector("#details");
 const addCommentsEl = document.querySelector("#addComments");
 const commentsEl = document.querySelector("#comments");
+const ratingEl = document.querySelector("#ratingSection");
 const logoutLink = document.querySelector("#logoutLink");
 
 // ─── Estado local ─────────────────────────────────────────────
@@ -38,8 +37,8 @@ let userIdState = null;
 let serviceIdState = null;
 let serviceState = null;
 let isCommentFormOpenState = false;
-let currentRatingState = 0;  // nota que o usuário JÁ salvou (0 = nenhuma ainda)
-let hoverRatingState = 0;    // nota que o mouse está passando por cima
+let currentRatingState = 0;   // nota que o usuário JÁ salvou (0 = nenhuma)
+let hoverRatingState = 0;   // nota que o mouse está passando por cima
 
 // ─── Helpers ─────────────────────────────────────────────────
 function setMsg(text = "") { msg.textContent = text; }
@@ -50,39 +49,12 @@ function getServiceIdFromUrl() {
     return params.get("id");
 }
 
-// ─── Render: serviço ─────────────────────────────────────────
-function renderServiceDetails(service, currentUserId) {
-    const isOwner = service.owner_id === currentUserId;
-
-    detailsEl.innerHTML = `
-        <h2 style="margin-top:0;">${escapeHTML(service.title)}</h2>
-
-        <div class="muted">
-            ${escapeHTML(service.subcategories.categories.name ?? "")}
-            · ${escapeHTML(service.subcategories.name ?? "")}
-            <br>${escapeHTML(service.city ?? "")}
-            (${escapeHTML(service.country ?? "")})
-        </div>
-
-        <p style="margin-top:12px;">${escapeHTML(service.description ?? "")}</p>
-
-        <p class="muted" style="margin-top:12px;">
-            Status: ${service.is_active ? "Active" : "Inactive"}
-        </p>
-
-        ${isOwner
-            ? `<div style="display:flex; gap:10px; margin-top:16px;">
-                    <button id="editServiceBtn" type="button">Edit</button>
-                    <button id="deleteServiceBtn" type="button">Delete</button>
-               </div>`
-            : `<div style="display:flex; gap:10px; margin-top:16px;">
-                    <button id="commentServiceBtn" type="button">Leave a Comment</button>
-               </div>`
-        }
-    `;
-}
-
 // ─── Render: formulário de comentário ─────────────────────────
+//
+// ⚠️  Permanece aqui (não em services-render.js) porque é um
+//     formulário com estado próprio (aberto/fechado), não um
+//     card de dados puro.
+//
 function renderCommentForm(service, currentUserId, isOpen) {
     const isOwner = service.owner_id === currentUserId;
 
@@ -99,70 +71,14 @@ function renderCommentForm(service, currentUserId, isOpen) {
 
                 <div style="display:flex; gap:10px; margin-top:16px;">
                     <button type="button" id="closeCommentBtn">Close</button>
-                    <button type="submit" id="saveCommentBtn">Save</button>
+                    <button type="submit"  id="saveCommentBtn">Save</button>
                 </div>
             </form>
         </div>
     `;
 }
 
-// ─── Render: lista de comentários ─────────────────────────────
-function renderComments(comments, currentUserId) {
-    if (!comments.length) {
-        commentsEl.innerHTML = `<p class="muted">No comments yet.</p>`;
-        return;
-    }
-
-    commentsEl.innerHTML = comments
-        .map((c) => {
-            const isAuthor = c.user_id === currentUserId;
-            const name = escapeHTML(c.profiles?.full_name ?? "Anonymous");
-            const date = new Date(c.created_at).toLocaleDateString();
-            const text = escapeHTML(c.comment_text ?? "");
-
-            return `
-                <div style="padding:10px 0; border-bottom:1px solid #eee;">
-                    <div style="display:flex; justify-content:space-between;">
-                        <strong>${name}</strong>
-                        <span class="muted">${date}</span>
-                    </div>
-                    <p style="margin:6px 0 0 0;">${text}</p>
-                    ${isAuthor
-                    ? `<button class="delCommentBtn" data-comment-id="${c.id}" style="margin-top:8px;">
-                               Delete
-                           </button>`
-                    : ""}
-                </div>
-            `;
-        })
-        .join("");
-}
-
-// ─── Render: rating ───────────────────────────────────────────
-function renderRating(service, currentUserId, myRating, summary) {
-    const ratingEl = document.querySelector("#ratingSection");
-    const isOwner = service.owner_id === currentUserId;
-
-    const starsHtml = [1, 2, 3, 4, 5]
-        .map((n) => {
-            const color = n <= myRating ? "#f5a623" : "#ccc";
-            return `<span
-                class="star"
-                data-value="${n}"
-                style="font-size:2rem; cursor:pointer; color:${color};"
-            >&#9733;</span>`;
-        })
-        .join("");
-
-    ratingEl.innerHTML = `
-        <p>Average: ${summary.average || "N/A"} (${summary.count} vote${summary.count !== 1 ? "s" : ""})</p>
-        ${!isOwner
-            ? `<div>${starsHtml}</div>
-               <p id="ratingMsg" class="muted"></p>`
-            : `<p class="muted">Owners cannot rate their own service.</p>`
-        }
-    `;
-}
+// ─── Helpers de render ────────────────────────────────────────
 
 function updateStarColors(activeRating) {
     document.querySelectorAll(".star").forEach((star) => {
@@ -171,10 +87,9 @@ function updateStarColors(activeRating) {
     });
 }
 
-// ─── Reload de comentários ────────────────────────────────────
 async function reloadComments() {
     const comments = await fetchComments(serviceIdState);
-    renderComments(comments, userIdState);
+    commentsEl.innerHTML = renderCommentsList(comments, userIdState);
 }
 
 // ─── Init ─────────────────────────────────────────────────────
@@ -253,7 +168,6 @@ async function init() {
 
         const input = document.querySelector("#serviceCommentInput");
         const commentText = input.value.trim();
-
         if (!commentText) { setMsgCom("Comment is required."); return; }
 
         const saveBtn = document.querySelector("#saveCommentBtn");
@@ -299,8 +213,6 @@ async function init() {
     });
 
     // ── Eventos de rating ──────────────────────────────────────
-    const ratingEl = document.querySelector("#ratingSection");
-
     ratingEl.addEventListener("mouseover", (e) => {
         const star = e.target.closest(".star");
         if (!star) return;
@@ -329,15 +241,17 @@ async function init() {
 
         try {
             ratingMsg.textContent = "Saving...";
-
-            // userId agora é passado como argumento — api.js não depende de estado global
             await saveRating(serviceIdState, userIdState, clicked);
 
             currentRatingState = clicked;
             hoverRatingState = 0;
 
             const summary = await fetchRatingSummary(serviceIdState);
-            renderRating(serviceState, userIdState, currentRatingState, summary);
+            ratingEl.innerHTML = renderRatingSection(
+                summary,
+                currentRatingState,
+                serviceState.owner_id === userIdState
+            );
 
             const newMsg = document.querySelector("#ratingMsg");
             if (newMsg) newMsg.textContent = "Rating saved!";
@@ -354,7 +268,7 @@ async function init() {
         const service = await fetchServiceById(serviceIdState);
         serviceState = service;
 
-        renderServiceDetails(serviceState, userIdState);
+        detailsEl.innerHTML = renderServiceDetails(serviceState, userIdState);
         renderCommentForm(serviceState, userIdState, isCommentFormOpenState);
         await reloadComments();
 
@@ -363,7 +277,11 @@ async function init() {
             fetchRatingSummary(serviceIdState),
         ]);
         currentRatingState = myRating;
-        renderRating(serviceState, userIdState, currentRatingState, summary);
+        ratingEl.innerHTML = renderRatingSection(
+            summary,
+            currentRatingState,
+            serviceState.owner_id === userIdState
+        );
 
         setMsg("");
         setMsgCom("");
