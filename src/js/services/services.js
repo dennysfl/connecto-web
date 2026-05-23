@@ -314,7 +314,7 @@ async function init() {
         }
     });
 
-    const categories = await fetchCategories();
+    const categories = await fetchCategories('service');
     fillCategoryDropdown(categories);
 
     categorySel.addEventListener("change", reload);

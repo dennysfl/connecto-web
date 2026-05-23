@@ -28,11 +28,11 @@ import { supabase } from "../supabaseClient.js";
  * @returns query com filtros aplicados
  */
 function applyFilters(q, filters = {}) {
+
     if (filters.onlyInactive && filters.userId) {
         // Traz: todos os ativos  OU  os inativos do próprio usuário
-        q = q.or(
-            `is_active.eq.true,and(is_active.eq.false,owner_id.eq.${filters.userId})`
-        );
+        //q = q.or(`is_active.eq.true,and(is_active.eq.false,owner_id.eq.${filters.userId})`);
+        q = q.eq("is_active", false);
     } else {
         q = q.eq("is_active", true);
     }
@@ -105,6 +105,7 @@ export async function fetchServices(filters = {}, orders = {}, range = {}) {
     if (orders.sortBy === "Newest") q = q.order("created_at", { ascending: false });
     else if (orders.sortBy === "Oldest") q = q.order("created_at", { ascending: true });
     else if (orders.sortBy === "AZ") q = q.order("title", { ascending: true });
+    else if (orders.sortBy === "ZA") q = q.order("title", { ascending: false });
 
     // Paginação: aplica o range que o hook calculou
     // from=0, to=9  → primeiros 10 itens
@@ -164,13 +165,18 @@ export async function fetchServiceById(serviceId) {
  *
  * @returns {object[]} lista de categorias ordenadas por sort_order
  */
-export async function fetchCategories() {
-    const { data, error } = await supabase
+export async function fetchCategories(entityType) {
+
+    let q = supabase
         .from("categories")
         .select("id, name")
-        .eq("is_active", true)
-        .order("sort_order", { ascending: true });
+        .eq("is_active", true);
 
+    q = q.eq("entity_type", entityType);
+
+    q = q.order("sort_order", { ascending: true });
+
+    const { data, error } = await q;
     if (error) throw error;
     return data ?? [];
 }
