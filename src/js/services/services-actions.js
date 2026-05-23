@@ -167,7 +167,7 @@ async function init() {
 
     setMsg("Loading...");
 
-    const categories = await fetchCategories();
+    const categories = await fetchCategories('service');
     fillCategoryDropdown(categories);
     fillSubCategoryDropdown([]);
 
