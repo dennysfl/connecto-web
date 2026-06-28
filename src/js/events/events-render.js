@@ -64,20 +64,31 @@ export function buildStarsHtml(average, size = "1rem") {
 
 /**
  * Gera o HTML de rating compacto (estrelas + "4.2 (10)") para usar nos cards da lista.
- * Recebe o array bruto do Supabase e calcula internamente.
  *
- * @param {Array<{rating: number}>} ratings - event.event_ratings
+ * @param {number} ratingCount   - total de avaliações
+ * @param {number} ratingAverage - média de 0 a 5
  * @returns {string} HTML string
  */
-export function buildRatingHtml(ratings = []) {
-    const { average, averageDisplay, count } = calcRatingSummary(ratings);
-    if (!count) return `<span style="color:#aaa; font-size:0.85rem;">No ratings yet</span>`;
+export function buildRatingHtml(ratingCount, ratingAverage) {
+    if (!ratingCount) return `<span style="color:#aaa; font-size:0.85rem;">No ratings yet</span>`;
     return `
-        <span>${buildStarsHtml(average)}</span>
-        <span style="font-size:0.85rem; color:#666; margin-left:4px;">
-            ${averageDisplay} (${count})
+        <span>${buildStarsHtml(ratingAverage)}</span>
+        <span style="color:#aaa; font-size:0.85rem;">
+            ${ratingAverage} (${ratingCount} reviews)
         </span>
     `;
+}
+
+/**
+ * Gera o HTML do contador de comentários para usar nos cards da lista.
+ *
+ * @param {number} commentCount
+ * @returns {string} HTML string
+ */
+export function buildCommentHtml(commentCount) {
+    if (!commentCount) return `<span style="color:#aaa; font-size:0.85rem;">0 comments</span>`;
+    if (commentCount === 1) return `<span style="color:#aaa; font-size:0.85rem;">1 comment</span>`;
+    return `<span style="color:#aaa; font-size:0.85rem;">${commentCount} comments</span>`;
 }
 
 // ─── Card da lista de Eventos ────────────────────────────────
@@ -98,9 +109,10 @@ export function buildRatingHtml(ratings = []) {
  */
 export function renderEventCard(event, isFav, isMine, isInactive) {
     const btnLabel = isFav ? "Unsave" : "Save";
-    const ratingHtml = buildRatingHtml(event.event_ratings ?? []);
-    const isOnline = event.event_type == "online";
-    console.log(event);
+    const ratingHtml = buildRatingHtml(event.rating_count, event.avg_rating);
+    const commentHtml = buildCommentHtml(event.comment_count);
+    const isOnline = event.event_type === "online";
+
     return `
         <div class="card" style="margin-bottom:12px;">
             <div style="display:flex; justify-content:space-between; gap:12px;">
@@ -112,23 +124,23 @@ export function renderEventCard(event, isFav, isMine, isInactive) {
                             ${escapeHTML(event.title)}
                         </a>
                     </h3>
-                    <div style="margin-bottom:6px;">${ratingHtml}</div>
+                    <div style="margin-bottom:1px;">${ratingHtml}</div>
+                    <div style="margin-bottom:10px;">🗨️ ${commentHtml}</div>
                     <div class="muted">
                         ${escapeHTML(event.subcategories?.categories?.name ?? "")}
                         · ${escapeHTML(event.subcategories?.name ?? "")}
-                        <br><br>
-                        ${!isOnline ? `
-                            ${escapeHTML(event.venue_name ?? "")}
-                             - ${escapeHTML(event.city ?? "")}
-                            (${escapeHTML(event.country ?? "")})
-                        ` : "OnLine"}
+                        <br>
+                        ${!isOnline
+                            ? `${escapeHTML(event.venue_name ?? "")} - ${escapeHTML(event.city ?? "")} (${escapeHTML(event.country ?? "")})`
+                            : "Online"
+                        }
                         ${isMine ? "· My event" : ""}
                         ${isInactive ? "· <strong>Inactive</strong>" : ""}
                     </div>
                     <p style="margin:10px 0 0 0;">
                         ${escapeHTML(event.description ?? "")}
                     </p>
-                </div>  
+                </div>
                 <div style="min-width:110px; text-align:right;">
                     ${!isInactive ? `
                         <button class="favBtn"
@@ -246,7 +258,7 @@ export function renderCommentCard(comment, currentUserId) {
     const isAuthor = comment.user_id === currentUserId;
     const name = escapeHTML(comment.profiles?.full_name ?? "Anonymous");
     const date = new Date(comment.created_at).toLocaleDateString();
-    const text = escapeHTML(comment.comment_text ?? "");
+    const text = escapeHTML(comment.content ?? "");
 
     return `
         <div style="padding:10px 0; border-bottom:1px solid #eee;">

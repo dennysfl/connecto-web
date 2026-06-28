@@ -34,8 +34,8 @@ function applyFilters(q, filters = {}) {
         q = q.in("id", filters.onlyFavoriteIds);
     }
 
-    if (filters.onlyMyeventIds?.length) {
-        q = q.in("id", filters.onlyMyeventIds);
+    if (filters.onlyMyEventIds?.length) {
+        q = q.in("id", filters.onlyMyEventIds);
     }
 
     // Se subcategoria está selecionada, ela já implica a categoria —
@@ -84,10 +84,33 @@ export async function fetchEvents(filters = {}, orders = {}, range = {}) {
         q = q.range(range.from, range.to);
     }
 
-    const { data, count, error } = await q;
+    const { data: events, count, error } = await q;
     if (error) throw error;
 
-    return { data: data ?? [], count: count ?? 0 };
+    if (events?.length > 0) {
+        const eventIds = events.map((e) => e.id);
+
+        const { data: summaries, error: summaryError } = await supabase
+            .from("events_summary")
+            .select("id, avg_rating, rating_count, comment_count")
+            .in("id", eventIds);
+
+        if (summaryError) throw summaryError;
+
+        const data = events.map((e) => {
+            const summary = summaries?.find((s) => s.id === e.id);
+            return {
+                ...e,
+                avg_rating: summary?.avg_rating ?? 0,
+                rating_count: summary?.rating_count ?? 0,
+                comment_count: summary?.comment_count ?? 0,
+            };
+        });
+
+        return { data, count: count ?? 0 };
+    }
+
+    return { data: [], count: count ?? 0 };
 }
 
 /**

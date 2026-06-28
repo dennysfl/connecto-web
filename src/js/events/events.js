@@ -233,7 +233,7 @@ async function loadMore() {
         if (paginationState.page === 0) {
             const [result, favoriteSet, myEventSet, myInactiveSet] = await Promise.all([
                 fetchEvents(getCurrentFilters(), getCurrentOrders(), { from, to }),
-                fetchFavorites(userIdState),
+                fetchFavorites(userIdState, "event"),
                 fetchMyEvents(userIdState),
                 fetchMyInactive(userIdState),
             ]);
