@@ -1,3 +1,4 @@
+
 // ============================================================
 // service-actions.js  (serviceNew.html + serviceEdit.html)
 //
@@ -14,7 +15,8 @@ import { requireAuthOrRedirect } from "../guard.js";
 import { signOut } from "../auth.js";
 
 // 💡 Importa APENAS as funções que este arquivo realmente usa
-import { fetchCategories, fetchSubCategories, fetchServiceById, createService, updateService } from "../services/services.api.js";
+import { fetchServiceById, createService, updateService } from "../services/services.api.js";
+import { fetchCategories, fetchSubCategories } from "../lib/hooks/general.api.js";
 import { escapeHTML } from "../utils/string.utils.js";
 
 // ─── Elementos da página ─────────────────────────────────────
@@ -111,8 +113,6 @@ form.addEventListener("submit", async (e) => {
     try {
         const serviceData = getFormData();
         validateForm(serviceData);
-
-        console.log(serviceData);
 
         if (isEditModeState) {
             // updateService vem de services.api.js — sem supabase aqui

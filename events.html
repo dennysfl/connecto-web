@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Connecto - Services</title>
+    <link rel="stylesheet" href="./src/css/styles.css" />
+</head>
+
+<body>
+    <main class="container">
+        <h1>Events</h1>
+        <p class="muted">Browse available services and save favorites.</p>
+
+        <div style="display:flex; gap:12px; margin: 12px 0;">
+            <a href="/dashboard.html">Back to Dashboard</a>
+            <a href="#" id="logoutLink">Logout</a>
+        </div>
+
+        <div style="display:flex; gap:12px; margin: 12px 0;">
+            <a href="/eventNew.html">New Event</a>
+        </div>
+
+        <!-- Filtros -->
+        <div class="card" style="margin-bottom:12px;">
+            <label for="searchText">Search</label>
+            <input id="searchText" />
+
+            <label for="categoryFilter">Category</label>
+            <select id="categoryFilter">
+                <option value="">All</option>
+            </select>
+
+            <label for="subcategoryFilter">Sub Category</label>
+            <select id="subcategoryFilter">
+                <option value="">All</option>
+            </select>
+
+            <div style="margin-top:10px; display:flex; gap:10px;">
+                <button id="runFiltersBtn" type="button">Show Results</button>
+                <button id="clearFiltersBtn" type="button">Clear filters</button>
+            </div>
+
+            <label style="display:flex; gap:8px; align-items:center; margin-top:10px;">
+                <input id="onlyFavs" type="checkbox" /> Only favorites
+                <input id="myEvents" type="checkbox" /> My Events
+                <input id="myInactive" type="checkbox" /> My Inactive Events
+            </label>
+        </div>
+
+        <!-- Contadores do topo -->
+        <p class="muted">
+            Saved: <strong id="savedCount">0</strong>
+            | My Services: <strong id="totalMyEvents">0</strong>
+            | Total: <strong id="totalEvents">0</strong>
+        </p>
+
+        <!-- Ordenação -->
+        <label for="sortEvent">Sort by:</label>
+        <select id="sortEvent">
+            <option value="Newest">Newest</option>
+            <option value="Oldest">Oldest</option>
+            <option value="AZ">A-Z</option>
+            <option value="ZA">Z-A</option>
+        </select>
+
+        <!-- ⭐ Contador Load More: "Mostrando X de Y serviços" -->
+        <p class="muted" style="margin-top: 12px;">
+            <span id="showingCount">Showing 0 of 0 events</span>
+        </p>
+
+        <p id="msg" class="msg"></p>
+
+        <!-- Botões de navegação rápida -->
+        <div style="display:flex; gap:12px;">
+            <button id="scrollBottomBtn" type="button" title="Go to bottom">
+                ↓ Bottom
+            </button>
+        </div>
+        <br>
+        <!-- Lista de serviços (Load More acumula itens aqui) -->
+        <div id="eventsList"></div>
+
+        <!-- ⭐ Botão Load More + botões de scroll -->
+        <div style="display:flex; flex-direction:column; align-items:center; gap:12px; margin-top:24px;">
+
+            <!-- Load More: visível só quando há mais para carregar (controlado pelo JS) -->
+            <button id="loadMoreBtn" type="button" style="display:none;">
+                Load More
+            </button>
+
+            <!-- Botões de navegação rápida -->
+            <div style="display:flex; gap:12px;">
+                <button id="scrollTopBtn" type="button" title="Back to top">
+                    ↑ Top
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <script type="module" src="./src/js/events/events.js"></script>
+</body>
+
+</html>
