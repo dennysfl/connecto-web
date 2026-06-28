@@ -15,13 +15,9 @@
 import { requireAuthOrRedirect } from "../guard.js";
 import { signOut } from "../auth.js";
 import { fetchServiceById, deleteService } from "./services.api.js";
-import { fetchComments, createComment, deleteComment } from "./services-comments.api.js";
-import { fetchMyRating, fetchRatingSummary, saveRating } from "./services-ratings.api.js";
-import {
-    renderServiceDetails,
-    renderCommentsList,
-    renderRatingSection,
-} from "./services-render.js";  // ← NOVO
+import { fetchComments, createComment, deleteComment } from "../lib/hooks/comments.api.js";
+import { fetchMyRating, fetchRatingSummary, saveRating } from "../lib/hooks/ratings.api.js";
+import { renderServiceDetails, renderCommentsList, renderRatingSection } from "./services-render.js";
 
 // ─── Elementos da página ─────────────────────────────────────
 const msg = document.querySelector("#msg");
@@ -31,6 +27,7 @@ const addCommentsEl = document.querySelector("#addComments");
 const commentsEl = document.querySelector("#comments");
 const ratingEl = document.querySelector("#ratingSection");
 const logoutLink = document.querySelector("#logoutLink");
+const entityType = "service";
 
 // ─── Estado local ─────────────────────────────────────────────
 let userIdState = null;
@@ -88,7 +85,7 @@ function updateStarColors(activeRating) {
 }
 
 async function reloadComments() {
-    const comments = await fetchComments(serviceIdState);
+    const comments = await fetchComments(serviceIdState, entityType);
     commentsEl.innerHTML = renderCommentsList(comments, userIdState);
 }
 
@@ -174,7 +171,7 @@ async function init() {
         saveBtn.disabled = true;
 
         try {
-            await createComment(serviceIdState, commentText);
+            await createComment(serviceIdState, entityType, userIdState, commentText);
             input.value = "";
             isCommentFormOpenState = false;
             renderCommentForm(serviceState, userIdState, isCommentFormOpenState);
@@ -241,12 +238,12 @@ async function init() {
 
         try {
             ratingMsg.textContent = "Saving...";
-            await saveRating(serviceIdState, userIdState, clicked);
+            await saveRating(serviceIdState, entityType, userIdState, clicked);
 
             currentRatingState = clicked;
             hoverRatingState = 0;
 
-            const summary = await fetchRatingSummary(serviceIdState);
+            const summary = await fetchRatingSummary(serviceIdState, entityType);
             ratingEl.innerHTML = renderRatingSection(
                 summary,
                 currentRatingState,
@@ -273,8 +270,8 @@ async function init() {
         await reloadComments();
 
         const [myRating, summary] = await Promise.all([
-            fetchMyRating(serviceIdState, userIdState),
-            fetchRatingSummary(serviceIdState),
+            fetchMyRating(serviceIdState, entityType, userIdState),
+            fetchRatingSummary(serviceIdState, entityType),
         ]);
         currentRatingState = myRating;
         ratingEl.innerHTML = renderRatingSection(

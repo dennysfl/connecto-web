@@ -71,14 +71,14 @@ function applyFilters(q, filters = {}) {
  *   - Agora é `{ from, to }` — índices diretos que o hook usePagination calcula.
  *   - O count agora aplica os mesmos filtros, então o total exibido é sempre correto.
  *
- * @param {object} filters
+ * @param {object}  filters
  * @param {string}  filters.category          - filtra por categoria (id)
  * @param {boolean} filters.onlyInactive      - se true, busca apenas inativos do próprio user
  * @param {string}  filters.filterDescription - texto livre para buscar em title/description
  * @param {string}  filters.userId            - necessário quando onlyInactive = true
  *
  * @param {object} orders
- * @param {string}  orders.sortBy             - "Newest" | "Oldest" | "AZ"
+ * @param {string} orders.sortBy             - "Newest" | "Oldest" | "AZ"
  *
  * @param {object} range
  * @param {number} range.from                - índice inicial (ex: 0, 10, 20...)
@@ -89,37 +89,54 @@ function applyFilters(q, filters = {}) {
  */
 export async function fetchServices(filters = {}, orders = {}, range = {}) {
 
-    // ── 1. Query principal: busca os dados paginados ──────────
+    // ── 1. Query principal ────────────────────────────────────
     let q = supabase
         .from("services")
         .select(
-            "id, title, description, subcategories!inner (name, categories!inner (name)), city, country, is_active, owner_id, created_at, service_ratings(rating)",
-            // count: 'exact' aqui junto com o select de dados
+            "id, title, description, subcategories!inner (name, categories!inner (name)), city, country, is_active, owner_id, created_at",
             { count: "exact" }
         );
 
-    // Aplica os filtros (função reutilizável definida acima)
     q = applyFilters(q, filters);
 
-    // Ordenação
     if (orders.sortBy === "Newest") q = q.order("created_at", { ascending: false });
     else if (orders.sortBy === "Oldest") q = q.order("created_at", { ascending: true });
     else if (orders.sortBy === "AZ") q = q.order("title", { ascending: true });
     else if (orders.sortBy === "ZA") q = q.order("title", { ascending: false });
 
-    // Paginação: aplica o range que o hook calculou
-    // from=0, to=9  → primeiros 10 itens
-    // from=10, to=19 → próximos 10 itens (Load More)
     if (range.from !== undefined && range.to !== undefined) {
         q = q.range(range.from, range.to);
     }
 
-    const { data, count, error } = await q;
-
+    const { data: services, count, error } = await q;
     if (error) throw error;
 
-    // Retorna `count` diretamente — é o que o hook usePagination espera
-    return { data: data ?? [], count: count ?? 0 };
+    // ── 2. Busca summary (ratings + comments) via view ───────
+    if (services?.length > 0) {
+        const serviceIds = services.map(s => s.id);
+
+        const { data: summaries, error: summaryError } = await supabase
+            .from("services_summary")
+            .select("id, avg_rating, rating_count, comment_count")
+            .in("id", serviceIds);
+
+        if (summaryError) throw summaryError;
+
+        // ── 3. Merge ──────────────────────────────────────────
+        const data = services.map(s => {
+            const summary = summaries?.find(r => r.id === s.id);
+            return {
+                ...s,
+                avg_rating: summary?.avg_rating ?? 0,
+                rating_count: summary?.rating_count ?? 0,
+                comment_count: summary?.comment_count ?? 0,
+            };
+        });
+
+        return { data, count: count ?? 0 };
+    }
+
+    return { data: [], count: count ?? 0 };
 }
 
 /**
@@ -266,55 +283,6 @@ export async function activateService(serviceId, userId) {
         .update({ is_active: true })
         .eq("id", serviceId)
         .eq("owner_id", userId);
-
-    if (error) throw error;
-}
-
-// ─── FAVORITES ───────────────────────────────────────────────
-
-/**
- * Busca todos os favoritos de um usuário.
- * Retorna um Set de IDs para facilitar a checagem (favoriteSet.has(id)).
- *
- * @param {string} userId
- * @returns {Set<string>}
- */
-export async function fetchFavorites(userId) {
-    const { data, error } = await supabase
-        .from("favorites")
-        .select("service_id")
-        .eq("user_id", userId);
-
-    if (error) throw error;
-    return new Set((data ?? []).map((row) => row.service_id));
-}
-
-/**
- * Adiciona um serviço aos favoritos do usuário.
- *
- * @param {string} userId
- * @param {string} serviceId
- */
-export async function addFavorite(userId, serviceId) {
-    const { error } = await supabase
-        .from("favorites")
-        .insert([{ user_id: userId, service_id: serviceId }]);
-
-    if (error) throw error;
-}
-
-/**
- * Remove um serviço dos favoritos do usuário.
- *
- * @param {string} userId
- * @param {string} serviceId
- */
-export async function removeFavorite(userId, serviceId) {
-    const { error } = await supabase
-        .from("favorites")
-        .delete()
-        .eq("user_id", userId)
-        .eq("service_id", serviceId);
 
     if (error) throw error;
 }

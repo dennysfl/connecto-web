@@ -1,22 +1,22 @@
 // ============================================================
-// services.js  (services.html)
+// events.js  (events.html)
 //
-// Responsabilidade: orquestrar a listagem de serviços.
+// Responsabilidade: orquestrar a listagem de eventos.
 //
 // O que mudou nesta versão:
-//   ✅ HTML dos cards extraído para services-render.js
+//   ✅ HTML dos cards extraído para events-render.js
 //   ✅ buildRatingHtml e calcRatingSummary removidos daqui
-//   ✅ renderNewServices agora delega para renderServiceCard
+//   ✅ renderNewEvents agora delega para renderEventCard
 // ============================================================
 
 import { requireAuthOrRedirect } from "../guard.js";
 import { signOut } from "../auth.js";
 import {
-    fetchServices,
-    fetchMyServices,
+    fetchEvents,
+    fetchMyEvents,
     fetchMyInactive,
-    activateService
-} from "./services.api.js";
+    activateEvent
+} from "./events.api.js";
 import {
     fetchFavorites,
     addFavorite,
@@ -24,27 +24,27 @@ import {
 } from "../lib/hooks/favorites.api.js";
 import { fetchCategories, fetchSubCategories } from "../lib/hooks/general.api.js";
 import { escapeHTML } from "../utils/string.utils.js";
-import { renderServiceCard } from "./services-render.js";  // ← NOVO
+import { renderEventCard } from "./events-render.js";  // ← NOVO
 
 // ─── Chave do sessionStorage ──────────────────────────────────
-const STATE_KEY = "services_listing_state";
+const STATE_KEY = "events_listing_state";
 
 // ─── Elementos da página ─────────────────────────────────────
 const msg = document.querySelector("#msg");
-const listEl = document.querySelector("#servicesList");
+const listEl = document.querySelector("#eventsList");
 const logoutLink = document.querySelector("#logoutLink");
 const categorySel = document.querySelector("#categoryFilter");
 const subCategorySel = document.querySelector("#subcategoryFilter");
-const sortSel = document.querySelector("#sortService");
+const sortSel = document.querySelector("#sortEvent");
 const filterText = document.querySelector("#searchText");
 const clearBtn = document.querySelector("#clearFiltersBtn");
 const filterBtn = document.querySelector("#runFiltersBtn");
 const onlyFavsChk = document.querySelector("#onlyFavs");
-const onlyMyServicesChk = document.querySelector("#myServices");
+const onlyMyEventsChk = document.querySelector("#myEvents");
 const onlyMyInactive = document.querySelector("#myInactive");
 const savedCountEl = document.querySelector("#savedCount");
-const totalServicesEl = document.querySelector("#totalServices");
-const myServicesEl = document.querySelector("#totalMyServices");
+const totalEventsEl = document.querySelector("#totalEvents");
+const myEventsEl = document.querySelector("#totalMyEvents");
 const loadMoreBtn = document.querySelector("#loadMoreBtn");
 const showingCountEl = document.querySelector("#showingCount");
 const scrollTopBtn = document.querySelector("#scrollTopBtn");
@@ -56,9 +56,9 @@ const PAGE_SIZE = 5;
 let paginationState = { page: 0, total: 0, loading: false };
 
 // ─── Estado de dados ──────────────────────────────────────────
-let servicesState = [];
+let eventsState = [];
 let favoriteSetState = new Set();
-let myServiceSetState = new Set();
+let myEventSetState = new Set();
 let myInactiveSetState = new Set();
 let userIdState = null;
 
@@ -82,35 +82,34 @@ function fillSubCategoryDropdown(subcategories) {
     subCategorySel.insertAdjacentHTML("beforeend", options);
 }
 
-function getViewServices() {
-    let view = [...servicesState];
-    if (onlyMyServicesChk.checked) view = view.filter((s) => myServiceSetState.has(s.id));
+function getViewEvents() {
+    let view = [...eventsState];
+    if (onlyMyEventsChk.checked) view = view.filter((s) => myEventSetState.has(s.id));
     if (onlyFavsChk.checked) view = view.filter((s) => favoriteSetState.has(s.id));
     return view;
 }
 
 // ─── Contadores ───────────────────────────────────────────────
 
-function updateCounters(viewServices) {
-    totalServicesEl.textContent = viewServices.length;
+function updateCounters(viewEvents) {
+    totalEventsEl.textContent = viewEvents.length;
 
     let savedInView = 0;
-    let myServicesInView = 0;
+    let myEventsInView = 0;
 
-    for (const service of viewServices) {
-        if (favoriteSetState.has(service.id)) savedInView++;
-        if (myServiceSetState.has(service.id)) myServicesInView++;
+    for (const event of viewEvents) {
+        if (favoriteSetState.has(event.id)) savedInView++;
+        if (myEventSetState.has(event.id)) myEventsInView++;
     }
 
     savedCountEl.textContent = savedInView;
-    myServicesEl.textContent = myServicesInView;
-    showingCountEl.textContent = `Mostrando ${servicesState.length} de ${paginationState.total} serviços`;
+    myEventsEl.textContent = myEventsInView;
+    showingCountEl.textContent = `Showing ${eventsState.length} of ${paginationState.total} events`;
 }
 
 // ─── Botão Load More ─────────────────────────────────────────
-
 function updateLoadMoreBtn() {
-    const hasMore = servicesState.length < paginationState.total;
+    const hasMore = eventsState.length < paginationState.total;
 
     if (paginationState.loading) {
         loadMoreBtn.style.display = "block";
@@ -132,17 +131,17 @@ function updateLoadMoreBtn() {
 
 /**
  * Acrescenta os novos cards ao final da lista (Load More acumula).
- * Agora delega para renderServiceCard — zero HTML aqui.
+ * Agora delega para renderEventCard — zero HTML aqui.
  */
-function renderNewServices(newServices) {
-    if (!newServices.length) return;
+function renderNewEvents(newEvents) {
+    if (!newEvents.length) return;
 
-    const html = newServices
-        .map((service) => renderServiceCard(
-            service,
-            favoriteSetState.has(service.id),
-            myServiceSetState.has(service.id),
-            myInactiveSetState.has(service.id)
+    const html = newEvents
+        .map((event) => renderEventCard(
+            event,
+            favoriteSetState.has(event.id),
+            myEventSetState.has(event.id),
+            myInactiveSetState.has(event.id)
         ))
         .join("");
 
@@ -150,14 +149,13 @@ function renderNewServices(newServices) {
 }
 
 function renderFilteredView() {
-    const view = getViewServices();
+    const view = getViewEvents();
     listEl.innerHTML = "";
-    if (view.length) renderNewServices(view);
+    if (view.length) renderNewEvents(view);
     updateCounters(view);
 }
 
 // ─── SessionStorage: salvar e restaurar estado ────────────────
-
 function saveListingState() {
     const state = {
         searchText: filterText.value,
@@ -165,7 +163,7 @@ function saveListingState() {
         subcategory: subCategorySel.value,
         sortBy: sortSel.value,
         onlyFavs: onlyFavsChk.checked,
-        myServices: onlyMyServicesChk.checked,
+        myEvents: onlyMyEventsChk.checked,
         myInactive: onlyMyInactive.checked,
         pagesLoaded: paginationState.page,
         total: paginationState.total,
@@ -192,7 +190,7 @@ async function applyRestoredFilters(state) {
     categorySel.value = state.category ?? "";
     sortSel.value = state.sortBy ?? "Newest";
     onlyFavsChk.checked = state.onlyFavs ?? false;
-    onlyMyServicesChk.checked = state.myServices ?? false;
+    onlyMyEventsChk.checked = state.myEvents ?? false;
     onlyMyInactive.checked = state.myInactive ?? false;
 
     const subcategories = await fetchSubCategories(state.category || null);
@@ -201,7 +199,6 @@ async function applyRestoredFilters(state) {
 }
 
 // ─── Lógica principal de Load More ───────────────────────────
-
 function getCurrentFilters() {
     return {
         category: categorySel.value || "",
@@ -210,7 +207,7 @@ function getCurrentFilters() {
         filterDescription: filterText.value.trim() || "",
         userId: userIdState,
         onlyFavoriteIds: onlyFavsChk.checked ? [...favoriteSetState] : null,
-        onlyMyServiceIds: onlyMyServicesChk.checked ? [...myServiceSetState] : null,
+        onlyMyEventIds: onlyMyEventsChk.checked ? [...myEventSetState] : null,
     };
 }
 
@@ -221,7 +218,7 @@ function getCurrentOrders() {
 async function loadMore() {
     if (paginationState.loading) return;
 
-    const hasMore = servicesState.length < paginationState.total;
+    const hasMore = eventsState.length < paginationState.total;
     if (!hasMore && paginationState.total > 0) return;
 
     paginationState.loading = true;
@@ -231,42 +228,42 @@ async function loadMore() {
     const to = from + PAGE_SIZE - 1;
 
     try {
-        let newServices, count;
+        let newEvents, count;
 
         if (paginationState.page === 0) {
-            const [result, favoriteSet, myServiceSet, myInactiveSet] = await Promise.all([
-                fetchServices(getCurrentFilters(), getCurrentOrders(), { from, to }),
-                fetchFavorites(userIdState, 'service'),
-                fetchMyServices(userIdState),
+            const [result, favoriteSet, myEventSet, myInactiveSet] = await Promise.all([
+                fetchEvents(getCurrentFilters(), getCurrentOrders(), { from, to }),
+                fetchFavorites(userIdState),
+                fetchMyEvents(userIdState),
                 fetchMyInactive(userIdState),
             ]);
 
-            newServices = result.data;
+            newEvents = result.data;
             count = result.count;
             favoriteSetState = favoriteSet;
-            myServiceSetState = myServiceSet;
+            myEventSetState = myEventSet;
             myInactiveSetState = myInactiveSet;
 
         } else {
-            const result = await fetchServices(
+            const result = await fetchEvents(
                 getCurrentFilters(), getCurrentOrders(), { from, to }
             );
-            newServices = result.data;
+            newEvents = result.data;
             count = result.count;
         }
 
         paginationState.total = count;
-        servicesState = [...servicesState, ...newServices];
+        eventsState = [...eventsState, ...newEvents];
         paginationState.page += 1;
 
-        renderNewServices(newServices);
+        renderNewEvents(newEvents);
 
     } catch (err) {
         console.error(err);
-        setMsg(err?.message ?? "Error loading services.");
+        setMsg(err?.message ?? "Error loading events.");
     } finally {
         paginationState.loading = false;
-        updateCounters(getViewServices());
+        updateCounters(getViewEvents());
         updateLoadMoreBtn();
         if (paginationState.page === 1) setMsg("");
     }
@@ -285,7 +282,7 @@ async function reload() {
         subCategorySel.value = previousSubcategory;
     }
 
-    servicesState = [];
+    eventsState = [];
     paginationState = { page: 0, total: 0, loading: false };
 
     await loadMore();
@@ -315,7 +312,8 @@ async function init() {
         }
     });
 
-    const categories = await fetchCategories('service');
+    const categories = await fetchCategories('event');
+    console.log(categories);
     fillCategoryDropdown(categories);
 
     categorySel.addEventListener("change", reload);
@@ -327,7 +325,7 @@ async function init() {
         categorySel.value = "";
         subCategorySel.value = "";
         onlyFavsChk.checked = false;
-        onlyMyServicesChk.checked = false;
+        onlyMyEventsChk.checked = false;
         onlyMyInactive.checked = false;
         filterText.value = "";
         sortSel.value = "Newest";
@@ -335,7 +333,7 @@ async function init() {
     });
 
     onlyFavsChk.addEventListener("change", () => reload());
-    onlyMyServicesChk.addEventListener("change", () => reload());
+    onlyMyEventsChk.addEventListener("change", () => reload());
     onlyMyInactive.addEventListener("change", () => reload());
     loadMoreBtn.addEventListener("click", () => loadMore());
 
@@ -346,18 +344,18 @@ async function init() {
     listEl.addEventListener("click", async (e) => {
 
         // Salva estado antes de navegar para os detalhes
-        const serviceLink = e.target.closest(".serviceLink");
-        if (serviceLink) {
+        const eventLink = e.target.closest(".eventLink");
+        if (eventLink) {
             e.preventDefault();
             saveListingState();
-            window.location.href = serviceLink.href;
+            window.location.href = eventLink.href;
             return;
         }
 
         // Save / Unsave favorito
         const favBtn = e.target.closest(".favBtn");
         if (favBtn) {
-            const serviceId = favBtn.dataset.serviceId;
+            const eventId = favBtn.dataset.eventId;
             const isFav = favBtn.dataset.isFav === "true";
 
             favBtn.disabled = true;
@@ -365,17 +363,17 @@ async function init() {
 
             try {
                 if (isFav) {
-                    await removeFavorite(userIdState, serviceId, 'service');
-                    favoriteSetState.delete(serviceId);
+                    await removeFavorite(userIdState, eventId);
+                    favoriteSetState.delete(eventId);
                     favBtn.textContent = "Save";
                     favBtn.dataset.isFav = "false";
                 } else {
-                    await addFavorite(userIdState, serviceId, 'service');
-                    favoriteSetState.add(serviceId);
+                    await addFavorite(userIdState, eventId);
+                    favoriteSetState.add(eventId);
                     favBtn.textContent = "Unsave";
                     favBtn.dataset.isFav = "true";
                 }
-                updateCounters(getViewServices());
+                updateCounters(getViewEvents());
             } catch (err) {
                 console.error(err);
                 setMsg(err?.message ?? "Action failed");
@@ -387,26 +385,26 @@ async function init() {
         // Reativar serviço inativo
         const activateBtn = e.target.closest(".activateBtn");
         if (activateBtn) {
-            const serviceId = activateBtn.dataset.serviceId;
-            const confirmed = window.confirm("Do you want to activate this service again?");
+            const eventId = activateBtn.dataset.eventId;
+            const confirmed = window.confirm("Do you want to activate this event again?");
             if (!confirmed) return;
 
             activateBtn.disabled = true;
             setMsg("");
 
             try {
-                await activateService(serviceId, userIdState);
+                await activateEvent(eventId, userIdState);
                 await reload();
-                setMsg("Service activated successfully.");
+                setMsg("Event activated successfully.");
             } catch (err) {
                 console.error(err);
-                setMsg(err?.message ?? "Failed to activate service.");
+                setMsg(err?.message ?? "Failed to event event.");
                 activateBtn.disabled = false;
             }
         }
     });
 
-    // ── Verifica se deve restaurar estado (voltou do serviceDetails) ──
+    // ── Verifica se deve restaurar estado (voltou do eventDetails) ──
     const savedState = loadListingState();
 
     if (savedState && savedState.pagesLoaded > 0) {
@@ -414,7 +412,7 @@ async function init() {
         await applyRestoredFilters(savedState);
 
         listEl.innerHTML = "";
-        servicesState = [];
+        eventsState = [];
         paginationState = { page: 0, total: 0, loading: false };
 
         await restorePages(savedState.pagesLoaded);

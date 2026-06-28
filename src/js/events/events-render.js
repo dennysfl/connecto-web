@@ -1,7 +1,7 @@
 // ============================================================
-// services/services-render.js
+// events/events-render.js
 //
-// Responsabilidade ÚNICA: gerar HTML dos cards do domínio "services".
+// Responsabilidade ÚNICA: gerar HTML dos cards do domínio "events".
 //
 // Regras deste arquivo:
 //   ✅ Recebe dados como parâmetros e retorna HTML string
@@ -11,8 +11,8 @@
 //   ❌ Nunca manipula estado ou adiciona event listeners
 //
 // Funções exportadas:
-//   renderServiceCard(service, isFav, isMine, isInactive)
-//   renderServiceDetails(service, currentUserId)
+//   renderEventCard(event, isFav, isMine, isInactive)
+//   renderEventDetails(Event, currentUserId)
 //   renderCommentCard(comment, currentUserId)
 //   renderCommentsList(comments, currentUserId)
 //   renderRatingSection(summary, myRating, isOwner)
@@ -23,6 +23,19 @@
 import { escapeHTML } from "../utils/string.utils.js";
 
 // ─── Utilitários de rating ────────────────────────────────────
+
+/**
+ * Calcula média e total a partir do array de ratings do Supabase.
+ *
+ * @param {Array<{rating: number}>} ratings
+ * @returns {{ average: number|null, averageDisplay: string, count: number }}
+ */
+export function calcRatingSummary(ratings = []) {
+    if (!ratings.length) return { average: null, averageDisplay: "0", count: 0 };
+    const sum = ratings.reduce((acc, r) => acc + r.rating, 0);
+    const average = sum / ratings.length;
+    return { average, averageDisplay: average.toFixed(1), count: ratings.length };
+}
 
 /**
  * Gera o HTML das 5 estrelas com preenchimento parcial (gradiente).
@@ -53,100 +66,80 @@ export function buildStarsHtml(average, size = "1rem") {
  * Gera o HTML de rating compacto (estrelas + "4.2 (10)") para usar nos cards da lista.
  * Recebe o array bruto do Supabase e calcula internamente.
  *
- * @param {Array<{rating: number}>} ratings - service.service_ratings
+ * @param {Array<{rating: number}>} ratings - event.event_ratings
  * @returns {string} HTML string
  */
-export function buildRatingHtml(ratingCount, ratingAverage) {
-    if (!ratingCount) return `<span style="color:#aaa; font-size:0.85rem;">No ratings yet</span>`;
+export function buildRatingHtml(ratings = []) {
+    const { average, averageDisplay, count } = calcRatingSummary(ratings);
+    if (!count) return `<span style="color:#aaa; font-size:0.85rem;">No ratings yet</span>`;
     return `
-        <span>${buildStarsHtml(ratingAverage)}</span>
-        <span style="color:#aaa; font-size:0.85rem;">
-            ${ratingAverage} (${ratingCount} reviews) 
+        <span>${buildStarsHtml(average)}</span>
+        <span style="font-size:0.85rem; color:#666; margin-left:4px;">
+            ${averageDisplay} (${count})
         </span>
     `;
 }
 
-
-// ─── Utilitários de comments  ────────────────────────────────────
-
-/**
- * Gera o HTML de rating compacto (estrelas + "4.2 (10)") para usar nos cards da lista.
- * Recebe o array bruto do Supabase e calcula internamente.
- *
- * @param {Array<{rating: number}>} ratings - service.service_ratings
- * @returns {string} HTML string
- */
-export function buildCommentHtml(commentCount) {
-    if (!commentCount) {
-        return `<span style="color:#aaa; font-size:0.85rem;">0 comments</span>`;
-    } else if (commentCount == 1) {
-        return `
-            <span style="color:#aaa; font-size:0.85rem;">${commentCount} comment </span>
-        `;
-    } else {
-        return `
-            <span style="color:#aaa; font-size:0.85rem;">${commentCount} comments </span>
-        `;
-    }
-}
-
-// ─── Card da lista de serviços ────────────────────────────────
+// ─── Card da lista de Eventos ────────────────────────────────
 
 /**
- * Gera o HTML de um card de serviço para a lista (services.html).
+ * Gera o HTML de um card de evento para a lista (events.html).
  *
- * Botões gerados (usam data-attributes para event delegation em services.js):
- *   .serviceLink   → clique salva estado antes de navegar
+ * Botões gerados (usam data-attributes para event delegation em events.js):
+ *   .eventLink   → clique salva estado antes de navegar
  *   .favBtn        → salvar / remover favorito
- *   .activateBtn   → reativar serviço inativo
+ *   .activateBtn   → reativar evento inativo
  *
- * @param {object}  service
- * @param {boolean} isFav      - o usuário salvou este serviço
- * @param {boolean} isMine     - o usuário é dono deste serviço
- * @param {boolean} isInactive - o serviço está inativo
+ * @param {object}  event
+ * @param {boolean} isFav      - o usuário salvou este evento
+ * @param {boolean} isMine     - o usuário é dono deste evento
+ * @param {boolean} isInactive - o evento está inativo
  * @returns {string} HTML string do card
  */
-export function renderServiceCard(service, isFav, isMine, isInactive) {
+export function renderEventCard(event, isFav, isMine, isInactive) {
     const btnLabel = isFav ? "Unsave" : "Save";
-    const ratingHtml = buildRatingHtml(service.rating_count, service.avg_rating);
-    const commentHtml = buildCommentHtml(service.comment_count);
-
+    const ratingHtml = buildRatingHtml(event.event_ratings ?? []);
+    const isOnline = event.event_type == "online";
+    console.log(event);
     return `
         <div class="card" style="margin-bottom:12px;">
             <div style="display:flex; justify-content:space-between; gap:12px;">
                 <div>
                     <h3 style="margin:0 0 4px 0;">
-                        <a class="serviceLink"
-                           href="/serviceDetails.html?id=${service.id}"
-                           data-service-id="${service.id}">
-                            ${escapeHTML(service.title)}
+                        <a class="eventLink"
+                           href="/eventDetails.html?id=${event.id}"
+                           data-event-id="${event.id}">
+                            ${escapeHTML(event.title)}
                         </a>
                     </h3>
-                    <div style="margin-bottom:1px;">${ratingHtml}</div>
-                    <div style="margin-bottom:10px;">🗨️ ${commentHtml}</div>
+                    <div style="margin-bottom:6px;">${ratingHtml}</div>
                     <div class="muted">
-                        ${escapeHTML(service.subcategories?.categories?.name ?? "")}
-                        · ${escapeHTML(service.subcategories?.name ?? "")}
-                        <br>${escapeHTML(service.city ?? "")}
-                        (${escapeHTML(service.country ?? "")})
-                        ${isMine ? "· My service" : ""}
+                        ${escapeHTML(event.subcategories?.categories?.name ?? "")}
+                        · ${escapeHTML(event.subcategories?.name ?? "")}
+                        <br><br>
+                        ${!isOnline ? `
+                            ${escapeHTML(event.venue_name ?? "")}
+                             - ${escapeHTML(event.city ?? "")}
+                            (${escapeHTML(event.country ?? "")})
+                        ` : "OnLine"}
+                        ${isMine ? "· My event" : ""}
                         ${isInactive ? "· <strong>Inactive</strong>" : ""}
                     </div>
                     <p style="margin:10px 0 0 0;">
-                        ${escapeHTML(service.description ?? "")}
+                        ${escapeHTML(event.description ?? "")}
                     </p>
-                </div>
+                </div>  
                 <div style="min-width:110px; text-align:right;">
                     ${!isInactive ? `
                         <button class="favBtn"
-                                data-service-id="${service.id}"
+                                data-event-id="${event.id}"
                                 data-is-fav="${isFav}">
                             ${btnLabel}
                         </button>
                     ` : ""}
                     ${isInactive ? `
                         <button class="activateBtn"
-                                data-service-id="${service.id}">
+                                data-event-id="${event.id}">
                             Activate
                         </button>
                     ` : ""}
@@ -156,46 +149,46 @@ export function renderServiceCard(service, isFav, isMine, isInactive) {
     `;
 }
 
-// ─── Card de detalhes do serviço ──────────────────────────────
+// ─── Card de detalhes do evento ──────────────────────────────
 
 /**
- * Gera o HTML do bloco de detalhes de um serviço (serviceDetails.html).
+ * Gera o HTML do bloco de detalhes de um evento (eventDetails.html).
  *
- * Botões gerados (event delegation em services-details.js):
- *   #editServiceBtn   → redireciona para serviceNew.html?id=...
- *   #deleteServiceBtn → confirma e deleta o serviço
- *   #commentServiceBtn → abre o formulário de comentário
+ * Botões gerados (event delegation em events-details.js):
+ *   #editEventBtn   → redireciona para eventNew.html?id=...
+ *   #deleteEventBtn → confirma e deleta o evento
+ *   #commentEventBtn → abre o formulário de comentário
  *
- * @param {object} service
+ * @param {object} event
  * @param {string} currentUserId
  * @returns {string} HTML string
  */
-export function renderServiceDetails(service, currentUserId) {
-    const isOwner = service.owner_id === currentUserId;
+export function renderEventDetails(event, currentUserId) {
+    const isOwner = event.owner_id === currentUserId;
 
     return `
-        <h2 style="margin-top:0;">${escapeHTML(service.title)}</h2>
+        <h2 style="margin-top:0;">${escapeHTML(event.title)}</h2>
 
         <div class="muted">
-            ${escapeHTML(service.subcategories?.categories?.name ?? "")}
-            · ${escapeHTML(service.subcategories?.name ?? "")}
-            <br>${escapeHTML(service.city ?? "")}
-            (${escapeHTML(service.country ?? "")})
+            ${escapeHTML(event.subcategories?.categories?.name ?? "")}
+            · ${escapeHTML(event.subcategories?.name ?? "")}
+            <br>${escapeHTML(event.city ?? "")}
+            (${escapeHTML(event.country ?? "")})
         </div>
 
-        <p style="margin-top:12px;">${escapeHTML(service.description ?? "")}</p>
+        <p style="margin-top:12px;">${escapeHTML(event.description ?? "")}</p>
 
         <p class="muted" style="margin-top:12px;">
-            Status: ${service.is_active ? "Active" : "Inactive"}
+            Status: ${event.is_active ? "Active" : "Inactive"}
         </p>
 
         ${isOwner
             ? `<div style="display:flex; gap:10px; margin-top:16px;">
-                    <button id="editServiceBtn"   type="button">Edit</button>
-                    <button id="deleteServiceBtn" type="button">Delete</button>
+                    <button id="editEventBtn"   type="button">Edit</button>
+                    <button id="deleteEventBtn" type="button">Delete</button>
                </div>`
             : `<div style="display:flex; gap:10px; margin-top:16px;">
-                    <button id="commentServiceBtn" type="button">Leave a Comment</button>
+                    <button id="commentEventBtn" type="button">Leave a Comment</button>
                </div>`
         }
     `;
@@ -204,15 +197,15 @@ export function renderServiceDetails(service, currentUserId) {
 // ─── Card de rating interativo ────────────────────────────────
 
 /**
- * Gera o HTML da seção de rating interativo (serviceDetails.html).
+ * Gera o HTML da seção de rating interativo (eventDetails.html).
  *
  * Estrelas geradas com class="star" e data-value para event delegation.
- * O orquestrador (services-details.js) é responsável pelos eventos
+ * O orquestrador (events-details.js) é responsável pelos eventos
  * mouseover / mouseout / click nas estrelas.
  *
  * @param {object} summary     - { average, count } vindo de fetchRatingSummary
  * @param {number} myRating    - nota que o usuário já deu (0 = nenhuma)
- * @param {boolean} isOwner    - donos não podem avaliar o próprio serviço
+ * @param {boolean} isOwner    - donos não podem avaliar o próprio evento
  * @returns {string} HTML string
  */
 export function renderRatingSection(summary, myRating, isOwner) {
@@ -232,7 +225,7 @@ export function renderRatingSection(summary, myRating, isOwner) {
         ${!isOwner
             ? `<div>${starsHtml}</div>
                <p id="ratingMsg" class="muted"></p>`
-            : `<p class="muted">Owners cannot rate their own service.</p>`
+            : `<p class="muted">Owners cannot rate their own event.</p>`
         }
     `;
 }
@@ -242,7 +235,7 @@ export function renderRatingSection(summary, myRating, isOwner) {
 /**
  * Gera o HTML de um único comentário.
  *
- * Botão gerado (event delegation em services-details.js):
+ * Botão gerado (event delegation em events-details.js):
  *   .delCommentBtn  → confirma e deleta o comentário
  *
  * @param {object} comment       - { id, user_id, created_at, comment_text, profiles }
@@ -253,7 +246,7 @@ export function renderCommentCard(comment, currentUserId) {
     const isAuthor = comment.user_id === currentUserId;
     const name = escapeHTML(comment.profiles?.full_name ?? "Anonymous");
     const date = new Date(comment.created_at).toLocaleDateString();
-    const text = escapeHTML(comment.content ?? "");
+    const text = escapeHTML(comment.comment_text ?? "");
 
     return `
         <div style="padding:10px 0; border-bottom:1px solid #eee;">

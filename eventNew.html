@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Connecto - Event Form</title>
+    <link rel="stylesheet" href="./src/css/styles.css" />
+</head>
+
+<body>
+    <main class="container">
+        <h1 id="pageTitle">New Event</h1>
+
+        <div style="display:flex; gap:12px; margin: 12px 0;">
+            <a href="/events.html">Back</a>
+            <a href="#" id="logoutLink">Logout</a>
+        </div>
+
+        <form id="eventForm">
+
+            <!-- =============================================
+                 SECTION 1: BASIC INFO
+                 Campos obrigatórios principais do evento
+            ============================================== -->
+
+            <label for="eventTitle">Title</label>
+            <input id="eventTitle" type="text" required />
+
+            <label for="eventDesc">Description</label>
+            <textarea id="eventDesc" rows="4"></textarea>
+            <!--
+                💡 DICA: Usamos <textarea> em vez de <input type="text"> para
+                campos de descrição. Isso dá ao utilizador mais espaço para
+                escrever e é semanticamente mais correto para textos longos.
+                No serviceNew.html o campo description usa <input> — considera
+                atualizar lá também!
+            -->
+
+            <!-- =============================================
+                 SECTION 2: CATEGORY
+                 Igual ao padrão de serviceNew.html
+            ============================================== -->
+
+            <label for="eventCate">Category</label>
+            <select id="eventCate" required></select>
+
+            <label for="eventSubCate">Sub Category</label>
+            <select id="eventSubCate" required></select>
+
+            <!-- =============================================
+                 SECTION 3: EVENT TYPE
+                 Controla quais campos de localização aparecem.
+                 O JS vai ouvir o "change" deste select e mostrar/
+                 esconder os blocos: #locationFields e #onlineFields
+            ============================================== -->
+
+            <label for="eventType">Event Type</label>
+            <select id="eventType" required>
+                <!--
+                    Os values aqui DEVEM ser iguais aos valores aceites
+                    pelo CHECK constraint da tabela:
+                    'in_person' | 'online' | 'hybrid'
+                -->
+                <option value="in_person">In Person</option>
+                <option value="online">Online</option>
+                <option value="hybrid">Hybrid</option>
+            </select>
+
+            <!-- =============================================
+                 SECTION 4: LOCATION (in_person / hybrid)
+                 Este bloco será mostrado/escondido pelo JS
+                 consoante o eventType selecionado.
+            ============================================== -->
+
+            <div id="locationFields">
+                <label for="eventVenueName">Venue Name</label>
+                <input id="eventVenueName" type="text" />
+
+                <label for="eventAddress">Address</label>
+                <input id="eventAddress" type="text" />
+
+                <label for="eventCity">City</label>
+                <input id="eventCity" type="text" />
+
+                <label for="eventCountry">Country</label>
+                <input id="eventCountry" type="text" />
+            </div>
+
+            <!-- =============================================
+                 SECTION 5: ONLINE (online / hybrid)
+                 Este bloco será mostrado/escondido pelo JS
+            ============================================== -->
+
+            <div id="onlineFields" style="display:none;">
+                <label for="eventOnlineUrl">Online URL</label>
+                <input id="eventOnlineUrl" type="url" placeholder="https://..." />
+                <!--
+                    💡 DICA: type="url" faz validação nativa do browser.
+                    O utilizador verá um erro se tentar submeter sem "https://"
+                    — sem precisar de nenhum JS extra!
+                -->
+            </div>
+
+            <!-- =============================================
+                 SECTION 6: DATE & TIME
+                 starts_at e ends_at são timestamp with time zone.
+                 O JS vai combinar a data + hora + timezone ao enviar.
+            ============================================== -->
+
+            <label for="eventStartsAt">Start Date & Time</label>
+            <input id="eventStartsAt" type="datetime-local" required />
+
+            <label for="eventEndsAt">End Date & Time</label>
+            <input id="eventEndsAt" type="datetime-local" />
+
+            <label for="eventTimezone">Timezone</label>
+            <select id="eventTimezone">
+                <!--
+                    💡 DICA: Idealmente este <select> seria populado dinamicamente
+                    pelo JS com Intl.supportedValuesOf('timeZone').
+                    Por agora colocamos as opções mais comuns como ponto de partida.
+                    O default da tabela é 'Europe/London'.
+                -->
+                <option value="Europe/London" selected>Europe/London (GMT)</option>
+                <option value="Europe/Lisbon">Europe/Lisbon</option>
+                <option value="Europe/Paris">Europe/Paris (CET)</option>
+                <option value="America/New_York">America/New_York (EST)</option>
+                <option value="America/Los_Angeles">America/Los_Angeles (PST)</option>
+                <option value="America/Sao_Paulo">America/Sao_Paulo (BRT)</option>
+                <option value="Asia/Dubai">Asia/Dubai (GST)</option>
+            </select>
+
+            <!-- =============================================
+                 SECTION 7: RECURRENCE
+                 is_recurring, recurrence_rule, recurrence_ends_at
+            ============================================== -->
+
+            <label style="display:flex; gap:8px; align-items:center; margin-top:12px;">
+                <input id="eventIsRecurring" type="checkbox" />
+                Recurring Event
+            </label>
+
+            <!--
+                Este bloco aparece apenas se is_recurring = true.
+                O JS vai adicionar/remover display:none ao ouvir o "change"
+                do checkbox #eventIsRecurring.
+            -->
+            <div id="recurrenceFields" style="display:none;">
+                <label for="eventRecurrenceRule">Recurrence Rule (RRULE)</label>
+                <input id="eventRecurrenceRule" type="text" placeholder="FREQ=WEEKLY;BYDAY=MO" />
+                <!--
+                    💡 DICA: O campo recurrence_rule na tabela segue o padrão
+                    iCalendar RRULE (RFC 5545). Ex: "FREQ=WEEKLY;BYDAY=MO,WE,FR"
+                    Futuramente podes substituir este input de texto por um
+                    componente visual de recorrência (diário, semanal, mensal).
+                -->
+
+                <label for="eventRecurrenceEndsAt">Recurrence Ends At</label>
+                <input id="eventRecurrenceEndsAt" type="datetime-local" />
+            </div>
+
+            <!-- =============================================
+                 SECTION 8: CAPACITY & PRICING
+            ============================================== -->
+
+            <label for="eventMaxCapacity">Max Capacity</label>
+            <input id="eventMaxCapacity" type="number" min="1" placeholder="Leave empty for unlimited" />
+            <!--
+                💡 DICA: O CHECK constraint da tabela diz max_capacity > 0.
+                Por isso usamos min="1". Se ficar vazio, o JS enviará null
+                (sem limite de capacidade).
+            -->
+
+            <label style="display:flex; gap:8px; align-items:center; margin-top:12px;">
+                <input id="eventIsFree" type="checkbox" checked />
+                Free Event
+            </label>
+
+            <!--
+                Este bloco aparece apenas se is_free = false.
+            -->
+            <div id="priceFields" style="display:none;">
+                <label for="eventPriceAmount">Price</label>
+                <input id="eventPriceAmount" type="number" min="0" step="0.01" placeholder="0.00" />
+                <!--
+                    💡 DICA: step="0.01" permite decimais (ex: 9.99).
+                    Corresponde ao tipo numeric(10,2) da tabela.
+                -->
+
+                <label for="eventPriceCurrency">Currency</label>
+                <select id="eventPriceCurrency">
+                    <option value="GBP" selected>GBP (£)</option>
+                    <option value="EUR">EUR (€)</option>
+                    <option value="USD">USD ($)</option>
+                    <option value="BRL">BRL (R$)</option>
+                </select>
+            </div>
+
+            <!-- =============================================
+                 SECTION 9: STATUS FLAGS
+                 is_active e is_cancelled são independentes.
+                 Um evento pode estar inativo sem estar cancelado.
+            ============================================== -->
+
+            <label style="display:flex; gap:8px; align-items:center; margin-top:12px;">
+                <input id="eventIsActive" type="checkbox" checked />
+                Active
+            </label>
+
+            <label style="display:flex; gap:8px; align-items:center; margin-top:8px;">
+                <input id="eventIsCancelled" type="checkbox" />
+                Cancelled
+            </label>
+
+            <button type="submit" id="saveBtn">Save</button>
+        </form>
+
+        <p id="msg" class="msg"></p>
+    </main>
+
+    <!--
+        💡 DICA: type="module" isola o escopo do JS (sem variáveis globais).
+        Mantemos o mesmo padrão do serviceNew.html.
+        O ficheiro events-actions.js será responsável por:
+          1. Popular os selects de categoria/subcategoria
+          2. Mostrar/esconder campos condicionais (type, recurring, price)
+          3. Submeter o form via API
+    -->
+    <script type="module" src="./src/js/events/events-actions.js"></script>
+</body>
+
+</html>
