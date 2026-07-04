@@ -363,12 +363,12 @@ async function init() {
 
             try {
                 if (isFav) {
-                    await removeFavorite(userIdState, eventId);
+                    await removeFavorite(userIdState, eventId, "event");
                     favoriteSetState.delete(eventId);
                     favBtn.textContent = "Save";
                     favBtn.dataset.isFav = "false";
                 } else {
-                    await addFavorite(userIdState, eventId);
+                    await addFavorite(userIdState, eventId, "event");
                     favoriteSetState.add(eventId);
                     favBtn.textContent = "Unsave";
                     favBtn.dataset.isFav = "true";
