@@ -13,7 +13,21 @@
         <h1>Service Details</h1>
 
         <div style="display:flex; gap:12px; margin: 12px 0;">
-            <a href="/services.html">Back</a>
+            <!--
+                O botão Back usa history.back() em vez de href fixo para /services.html.
+
+                POR QUE?
+                - href="/services.html" sempre carrega a página do zero (perde o estado)
+                - history.back() volta para a URL exata que o usuário estava
+                  (o browser já tem a página em cache/histórico)
+                - Combinado com o sessionStorage salvo em services.js,
+                  o estado (filtros + paginação + scroll) é restaurado automaticamente.
+
+                FALLBACK: se o usuário abriu serviceDetails direto (sem histórico),
+                o onclick direciona para /services.html normalmente.
+            -->
+            <a href="#" id="backBtn"
+                onclick="history.length > 1 ? history.back() : window.location.href='/services.html'; return false;">Back</a>
             <a href="#" id="logoutLink">Logout</a>
         </div>
 
@@ -23,11 +37,16 @@
         <p id="msgCom" class="msgCom"></p>
         <div id="addComments"></div>
 
+        <b>Rate the service</b>
+        <div id="ratingSection" class="card"></div>
+
+        <br>
+
         <b>Comments</b>
         <div id="comments" class="card"></div>
     </main>
 
-    <script type="module" src="./src/js/serviceDetails.js"></script>
+    <script type="module" src="./src/js/services/services-details.js"></script>
 </body>
 
 </html>

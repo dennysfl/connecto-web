@@ -1,10 +1,25 @@
-import { supabase } from "./supabaseClient.js";
-import { requireAuthOrRedirect } from "./guard.js";
-import { signOut } from "./auth.js";
 
-// --------------------
-// Elementos da página
-// --------------------
+// ============================================================
+// service-actions.js  (serviceNew.html + serviceEdit.html)
+//
+// Responsabilidade: orquestrar o formulário de criar/editar serviço.
+//
+// O que mudou em relação ao original:
+//   ✅ Não tem mais nenhuma função que fala com o Supabase
+//   ✅ Toda comunicação com o banco vem de services.api.js
+//   ✅ escapeHTML veio de utils/string.utils.js (sem duplicação)
+//   ✅ saveRating recebe userId como parâmetro (sem depender de estado global)
+// ============================================================
+
+import { requireAuthOrRedirect } from "../guard.js";
+import { signOut } from "../auth.js";
+
+// 💡 Importa APENAS as funções que este arquivo realmente usa
+import { fetchServiceById, createService, updateService } from "../services/services.api.js";
+import { fetchCategories, fetchSubCategories } from "../lib/hooks/general.api.js";
+import { escapeHTML } from "../utils/string.utils.js";
+
+// ─── Elementos da página ─────────────────────────────────────
 const form = document.querySelector("#serviceForm");
 const msg = document.querySelector("#msg");
 const pageTitle = document.querySelector("#pageTitle");
@@ -14,31 +29,19 @@ const saveBtn = document.querySelector("#saveBtn");
 const titleInput = document.querySelector("#serviceTitle");
 const descInput = document.querySelector("#serviceDesc");
 const categorySel = document.querySelector("#serviceCate");
+const subCategorySel = document.querySelector("#serviceSubCate");
 const cityInput = document.querySelector("#serviceCity");
 const countryInput = document.querySelector("#serviceCountry");
 const isActiveInput = document.querySelector("#serviceIsActive");
 
-// --------------------
-// Estado local
-// --------------------
+// ─── Estado local ─────────────────────────────────────────────
 let userIdState = null;
 let serviceIdState = null;
 let isEditModeState = false;
 
-// --------------------
-// Helpers
-// --------------------
+// ─── Helpers de UI ───────────────────────────────────────────
 function setMsg(text = "") {
     msg.textContent = text;
-}
-
-function escapeHtml(str) {
-    return String(str ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
 }
 
 function getServiceIdFromUrl() {
@@ -50,7 +53,7 @@ function getFormData() {
     return {
         title: titleInput.value.trim(),
         description: descInput.value.trim(),
-        category: categorySel.value.trim(),
+        subcategory_id: subCategorySel.value || null,
         city: cityInput.value.trim(),
         country: countryInput.value.trim(),
         is_active: isActiveInput.checked,
@@ -60,87 +63,48 @@ function getFormData() {
 function validateForm(serviceData) {
     if (!serviceData.title) throw new Error("Title is required.");
     if (!serviceData.description) throw new Error("Description is required.");
-    if (!serviceData.category) throw new Error("Category is required.");
+    if (!categorySel.value) throw new Error("Category is required.");
+    if (!serviceData.subcategory_id) throw new Error("Sub Category is required.");
     if (!serviceData.city) throw new Error("City is required.");
     if (!serviceData.country) throw new Error("Country is required.");
 }
 
 function fillCategoryDropdown(categories) {
-    categorySel.innerHTML = categories
-        .map((category) => {
-            const safeValue = escapeHtml(category);
-            return `<option value="${safeValue}">${safeValue}</option>`;
-        })
+    categorySel.innerHTML = `<option value="">Select a category</option>`;
+
+    const options = categories
+        .map((c) => `<option value="${c.id}">${escapeHTML(c.name)}</option>`)
         .join("");
+
+    categorySel.insertAdjacentHTML("beforeend", options);
 }
 
-function populateForm(service) {
+function fillSubCategoryDropdown(subcategories) {
+    subCategorySel.innerHTML = `<option value="">Select a subcategory</option>`;
+
+    const options = subcategories
+        .map((c) => `<option value="${c.id}">${escapeHTML(c.name)}</option>`)
+        .join("");
+
+    subCategorySel.insertAdjacentHTML("beforeend", options);
+}
+
+async function populateForm(service) {
     titleInput.value = service.title ?? "";
     descInput.value = service.description ?? "";
-    categorySel.value = service.category ?? "";
     cityInput.value = service.city ?? "";
     countryInput.value = service.country ?? "";
     isActiveInput.checked = Boolean(service.is_active);
+
+    const categoryId = service.subcategories?.category_id ?? "";
+    const subcategoryId = service.subcategory_id ?? "";
+
+    categorySel.value = categoryId;
+
+    await reloadSubCate(categoryId, subcategoryId);
 }
 
-// --------------------
-// Data access
-// --------------------
-async function fetchCategories() {
-    const { data, error } = await supabase
-        .from("services")
-        .select("category")
-        .eq("is_active", true);
-
-    if (error) throw error;
-
-    const unique = [...new Set((data ?? []).map((row) => row.category).filter(Boolean))];
-    unique.sort((a, b) => a.localeCompare(b));
-
-    if (!unique.length) {
-        throw new Error("No categories found.");
-    }
-
-    return unique;
-}
-
-async function fetchServiceById(serviceId) {
-    const { data, error } = await supabase
-        .from("services")
-        .select("id, owner_id, title, description, category, city, country, is_active")
-        .eq("id", serviceId)
-        .single();
-
-    if (error) throw error;
-    return data;
-}
-
-async function createService(serviceData) {
-    const { data, error } = await supabase
-        .from("services")
-        .insert([serviceData])
-        .select()
-        .single();
-
-    if (error) throw error;
-    return data;
-}
-
-async function updateService(serviceId, serviceData) {
-    const { data, error } = await supabase
-        .from("services")
-        .update(serviceData)
-        .eq("id", serviceId)
-        .select()
-        .single();
-
-    if (error) throw error;
-    return data;
-}
-
-// --------------------
-// Submit
-// --------------------
+// ─── Evento de submit ─────────────────────────────────────────
 form.addEventListener("submit", async (e) => {
     e.preventDefault();
     setMsg("");
@@ -151,13 +115,12 @@ form.addEventListener("submit", async (e) => {
         validateForm(serviceData);
 
         if (isEditModeState) {
-            const updated = await updateService(serviceIdState, serviceData);
-            console.log("Updated service:", updated);
+            // updateService vem de services.api.js — sem supabase aqui
+            await updateService(serviceIdState, serviceData);
             setMsg("Service updated successfully.");
             window.location.replace(`/serviceDetails.html?id=${serviceIdState}`);
         } else {
             const created = await createService(serviceData);
-            console.log("Created service:", created);
             setMsg("Service created successfully.");
             window.location.replace(`/serviceDetails.html?id=${created.id}`);
         }
@@ -169,9 +132,20 @@ form.addEventListener("submit", async (e) => {
     }
 });
 
-// --------------------
-// Init
-// --------------------
+async function reloadSubCate(categoryId, selectedSubcategoryId = "") {
+    if (!categoryId) {
+        fillSubCategoryDropdown([]);
+        return;
+    }
+
+    const subcategories = await fetchSubCategories(categoryId);
+    fillSubCategoryDropdown(subcategories);
+
+    if (selectedSubcategoryId) {
+        subCategorySel.value = selectedSubcategoryId;
+    }
+}
+// ─── Init ────────────────────────────────────────────────────
 async function init() {
     const session = await requireAuthOrRedirect();
     if (!session) return;
@@ -182,7 +156,6 @@ async function init() {
 
     logoutLink.addEventListener("click", async (e) => {
         e.preventDefault();
-
         try {
             await signOut();
             window.location.replace("/login.html");
@@ -194,8 +167,13 @@ async function init() {
 
     setMsg("Loading...");
 
-    const categories = await fetchCategories();
+    const categories = await fetchCategories('service');
     fillCategoryDropdown(categories);
+    fillSubCategoryDropdown([]);
+
+    categorySel.addEventListener("change", async () => {
+        await reloadSubCate(categorySel.value);
+    });
 
     if (isEditModeState) {
         pageTitle.textContent = "Edit Service";
@@ -206,7 +184,7 @@ async function init() {
             throw new Error("You do not have permission to edit this service.");
         }
 
-        populateForm(service);
+        await populateForm(service);
     } else {
         pageTitle.textContent = "New Service";
     }

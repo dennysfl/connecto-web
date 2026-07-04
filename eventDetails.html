@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Connecto - Event Details</title>
+    <link rel="stylesheet" href="./src/css/styles.css" />
+</head>
+
+<body>
+    <main class="container">
+        <h1>Event Details</h1>
+
+        <div style="display:flex; gap:12px; margin: 12px 0;">
+            <a href="#" id="backBtn"
+                onclick="history.length > 1 ? history.back() : window.location.href='/events.html'; return false;">Back</a>
+            <a href="#" id="logoutLink">Logout</a>
+        </div>
+
+        <p id="msg" class="msg"></p>
+        <div id="details" class="card"></div>
+
+        <p id="msgCom" class="msgCom"></p>
+        <div id="addComments"></div>
+
+        <b>Rate the event</b>
+        <div id="ratingSection" class="card"></div>
+
+        <br>
+
+        <b>Comments</b>
+        <div id="comments" class="card"></div>
+    </main>
+
+    <script type="module" src="./src/js/events/events-details.js"></script>
+</body>
+
+</html>

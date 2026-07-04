@@ -10,7 +10,7 @@
 
 <body>
     <main class="container">
-        <h1>Services</h1>
+        <h1>Events</h1>
         <p class="muted">Browse available services and save favorites.</p>
 
         <div style="display:flex; gap:12px; margin: 12px 0;">
@@ -19,7 +19,7 @@
         </div>
 
         <div style="display:flex; gap:12px; margin: 12px 0;">
-            <a href="/serviceNew.html">New Service</a>
+            <a href="/eventNew.html">New Event</a>
         </div>
 
         <!-- Filtros -->
@@ -44,21 +44,21 @@
 
             <label style="display:flex; gap:8px; align-items:center; margin-top:10px;">
                 <input id="onlyFavs" type="checkbox" /> Only favorites
-                <input id="myServices" type="checkbox" /> My Services
-                <input id="myInactive" type="checkbox" /> My Inactive Services
+                <input id="myEvents" type="checkbox" /> My Events
+                <input id="myInactive" type="checkbox" /> My Inactive Events
             </label>
         </div>
 
         <!-- Contadores do topo -->
         <p class="muted">
             Saved: <strong id="savedCount">0</strong>
-            | My Services: <strong id="totalMyServices">0</strong>
-            | Total: <strong id="totalServices">0</strong>
+            | My Services: <strong id="totalMyEvents">0</strong>
+            | Total: <strong id="totalEvents">0</strong>
         </p>
 
         <!-- Ordenação -->
-        <label for="sortService">Sort by:</label>
-        <select id="sortService">
+        <label for="sortEvent">Sort by:</label>
+        <select id="sortEvent">
             <option value="Newest">Newest</option>
             <option value="Oldest">Oldest</option>
             <option value="AZ">A-Z</option>
@@ -67,7 +67,7 @@
 
         <!-- ⭐ Contador Load More: "Mostrando X de Y serviços" -->
         <p class="muted" style="margin-top: 12px;">
-            <span id="showingCount">Mostrando 0 de 0 serviços</span>
+            <span id="showingCount">Showing 0 of 0 events</span>
         </p>
 
         <p id="msg" class="msg"></p>
@@ -80,7 +80,7 @@
         </div>
         <br>
         <!-- Lista de serviços (Load More acumula itens aqui) -->
-        <div id="servicesList"></div>
+        <div id="eventsList"></div>
 
         <!-- ⭐ Botão Load More + botões de scroll -->
         <div style="display:flex; flex-direction:column; align-items:center; gap:12px; margin-top:24px;">
@@ -100,7 +100,7 @@
 
     </main>
 
-    <script type="module" src="./src/js/services/services.js"></script>
+    <script type="module" src="./src/js/events/events.js"></script>
 </body>
 
 </html>
