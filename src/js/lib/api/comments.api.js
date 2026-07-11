@@ -1,5 +1,5 @@
 // ============================================================
-// lib/hooks/comments.api.js
+// lib/api/comments.api.js
 //
 // Responsabilidade ÚNICA: comunicação com o Supabase para
 // comentários (comments)

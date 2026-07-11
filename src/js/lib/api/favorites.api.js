@@ -1,5 +1,5 @@
 // ============================================================
-// lib/hooks/favorites.api.js
+// lib/api/favorites.api.js
 //
 // Responsabilidade ÚNICA: toda comunicação com o Supabase
 // relacionada à tabela "favorites".

@@ -15,9 +15,12 @@
 import { requireAuthOrRedirect } from "../guard.js";
 import { signOut } from "../auth.js";
 import { fetchServiceById, deleteService } from "./services.api.js";
-import { fetchComments, createComment, deleteComment } from "../lib/hooks/comments.api.js";
-import { fetchMyRating, fetchRatingSummary, saveRating } from "../lib/hooks/ratings.api.js";
+import { fetchComments, createComment, deleteComment } from "../lib/api/comments.api.js";
+import { fetchMyRating, fetchRatingSummary, saveRating } from "../lib/api/ratings.api.js";
 import { renderServiceDetails, renderCommentsList, renderRatingSection } from "./services-render.js";
+import { fetchPhotos } from "../lib/api/photos.api.js";
+import { renderServicePhotosCard } from "./services-render.js";
+import { openLightbox } from "../ui/photo-lightbox.js";
 
 // ─── Elementos da página ─────────────────────────────────────
 const msg = document.querySelector("#msg");
@@ -28,6 +31,7 @@ const commentsEl = document.querySelector("#comments");
 const ratingEl = document.querySelector("#ratingSection");
 const logoutLink = document.querySelector("#logoutLink");
 const entityType = "service";
+const photosEl = document.querySelector("#photosSection");
 
 // ─── Estado local ─────────────────────────────────────────────
 let userIdState = null;
@@ -36,6 +40,7 @@ let serviceState = null;
 let isCommentFormOpenState = false;
 let currentRatingState = 0;   // nota que o usuário JÁ salvou (0 = nenhuma)
 let hoverRatingState = 0;   // nota que o mouse está passando por cima
+let photosState = [];
 
 // ─── Helpers ─────────────────────────────────────────────────
 function setMsg(text = "") { msg.textContent = text; }
@@ -258,6 +263,14 @@ async function init() {
         }
     });
 
+    // ── Eventos de phtos ──────────────────────────────────────
+    photosEl.addEventListener("click", (e) => {
+        const img = e.target.closest(".photoThumbImg");
+        if (!img) return;
+        const index = Number(img.dataset.lightboxIndex);
+        openLightbox(photosState.map((p) => p.url), index);
+    });
+
     // ── Carregamento inicial ───────────────────────────────────
     setMsg("Loading...");
 
@@ -269,10 +282,15 @@ async function init() {
         renderCommentForm(serviceState, userIdState, isCommentFormOpenState);
         await reloadComments();
 
-        const [myRating, summary] = await Promise.all([
+        const [myRating, summary, photos] = await Promise.all([
             fetchMyRating(serviceIdState, entityType, userIdState),
             fetchRatingSummary(serviceIdState, entityType),
+            fetchPhotos(serviceIdState, entityType),
         ]);
+
+        photosState = photos;
+        photosEl.innerHTML = renderServicePhotosCard(photosState);
+
         currentRatingState = myRating;
         ratingEl.innerHTML = renderRatingSection(
             summary,

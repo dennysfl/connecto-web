@@ -21,6 +21,7 @@
 // ============================================================
 
 import { escapeHTML } from "../utils/string.utils.js";
+import { renderPhotosCard } from "../ui/photos-render.js";
 
 // ─── Utilitários de rating ────────────────────────────────────
 
@@ -113,33 +114,42 @@ export function renderEventCard(event, isFav, isMine, isInactive) {
     const commentHtml = buildCommentHtml(event.comment_count);
     const isOnline = event.event_type === "online";
 
+    // ⭐ NOVO
+    const coverHtml = event.coverPhotoUrl
+        ? `<img src="${event.coverPhotoUrl}" alt=""
+                style="width:72px; height:72px; object-fit:cover; border-radius:6px; flex-shrink:0;" />`
+        : "";
+
     return `
         <div class="card" style="margin-bottom:12px;">
             <div style="display:flex; justify-content:space-between; gap:12px;">
-                <div>
-                    <h3 style="margin:0 0 4px 0;">
-                        <a class="eventLink"
-                           href="/eventDetails.html?id=${event.id}"
-                           data-event-id="${event.id}">
-                            ${escapeHTML(event.title)}
-                        </a>
-                    </h3>
-                    <div style="margin-bottom:1px;">${ratingHtml}</div>
-                    <div style="margin-bottom:10px;">🗨️ ${commentHtml}</div>
-                    <div class="muted">
-                        ${escapeHTML(event.subcategories?.categories?.name ?? "")}
-                        · ${escapeHTML(event.subcategories?.name ?? "")}
-                        <br>
-                        ${!isOnline
-                            ? `${escapeHTML(event.venue_name ?? "")} - ${escapeHTML(event.city ?? "")} (${escapeHTML(event.country ?? "")})`
-                            : "Online"
-                        }
-                        ${isMine ? "· My event" : ""}
-                        ${isInactive ? "· <strong>Inactive</strong>" : ""}
+                <div style="display:flex; gap:12px;">
+                    ${coverHtml}
+                    <div>
+                        <h3 style="margin:0 0 4px 0;">
+                            <a class="eventLink"
+                               href="/eventDetails.html?id=${event.id}"
+                               data-event-id="${event.id}">
+                                ${escapeHTML(event.title)}
+                            </a>
+                        </h3>
+                        <div style="margin-bottom:1px;">${ratingHtml}</div>
+                        <div style="margin-bottom:10px;">🗨️ ${commentHtml}</div>
+                        <div class="muted">
+                            ${escapeHTML(event.subcategories?.categories?.name ?? "")}
+                            · ${escapeHTML(event.subcategories?.name ?? "")}
+                            <br>
+                            ${!isOnline
+            ? `${escapeHTML(event.venue_name ?? "")} - ${escapeHTML(event.city ?? "")} (${escapeHTML(event.country ?? "")})`
+            : "Online"
+        }
+                            ${isMine ? "· My event" : ""}
+                            ${isInactive ? "· <strong>Inactive</strong>" : ""}
+                        </div>
+                        <p style="margin:10px 0 0 0;">
+                            ${escapeHTML(event.description ?? "")}
+                        </p>
                     </div>
-                    <p style="margin:10px 0 0 0;">
-                        ${escapeHTML(event.description ?? "")}
-                    </p>
                 </div>
                 <div style="min-width:110px; text-align:right;">
                     ${!isInactive ? `
@@ -294,4 +304,9 @@ export function renderCommentsList(comments, currentUserId) {
     return comments
         .map((c) => renderCommentCard(c, currentUserId))
         .join("");
+}
+// ─── Card de Photos ──────────────────────────
+
+export function renderEventPhotosCard(photos) {
+    return renderPhotosCard(photos, "No photos added");
 }

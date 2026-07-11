@@ -1,5 +1,5 @@
 // ============================================================
-// lib/hooks/ratings.api.js
+// lib/api/ratings.api.js
 //
 // Responsabilidade ÚNICA: comunicação com o Supabase para ratings.
 //

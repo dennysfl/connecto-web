@@ -21,6 +21,7 @@
 // ============================================================
 
 import { escapeHTML } from "../utils/string.utils.js";
+import { renderPhotosCard } from "../ui/photos-render.js";
 
 // ─── Utilitários de rating ────────────────────────────────────
 
@@ -66,7 +67,6 @@ export function buildRatingHtml(ratingCount, ratingAverage) {
     `;
 }
 
-
 // ─── Utilitários de comments  ────────────────────────────────────
 
 /**
@@ -111,44 +111,48 @@ export function renderServiceCard(service, isFav, isMine, isInactive) {
     const ratingHtml = buildRatingHtml(service.rating_count, service.avg_rating);
     const commentHtml = buildCommentHtml(service.comment_count);
 
+    // ⭐ NOVO
+    const coverHtml = service.coverPhotoUrl
+        ? `<img src="${service.coverPhotoUrl}" alt=""
+                style="width:72px; height:72px; object-fit:cover; border-radius:6px; flex-shrink:0;" />`
+        : "";
+
     return `
         <div class="card" style="margin-bottom:12px;">
             <div style="display:flex; justify-content:space-between; gap:12px;">
-                <div>
-                    <h3 style="margin:0 0 4px 0;">
-                        <a class="serviceLink"
-                           href="/serviceDetails.html?id=${service.id}"
-                           data-service-id="${service.id}">
-                            ${escapeHTML(service.title)}
-                        </a>
-                    </h3>
-                    <div style="margin-bottom:1px;">${ratingHtml}</div>
-                    <div style="margin-bottom:10px;">🗨️ ${commentHtml}</div>
-                    <div class="muted">
-                        ${escapeHTML(service.subcategories?.categories?.name ?? "")}
-                        · ${escapeHTML(service.subcategories?.name ?? "")}
-                        <br>${escapeHTML(service.city ?? "")}
-                        (${escapeHTML(service.country ?? "")})
-                        ${isMine ? "· My service" : ""}
-                        ${isInactive ? "· <strong>Inactive</strong>" : ""}
+                <div style="display:flex; gap:12px;">
+                    ${coverHtml}
+                    <div>
+                        <h3 style="margin:0 0 4px 0;">
+                            <a class="serviceLink"
+                               href="/serviceDetails.html?id=${service.id}"
+                               data-service-id="${service.id}">
+                                ${escapeHTML(service.title)}
+                            </a>
+                        </h3>
+                        <div style="margin-bottom:1px;">${ratingHtml}</div>
+                        <div style="margin-bottom:10px;">🗨️ ${commentHtml}</div>
+                        <div class="muted">
+                            ${escapeHTML(service.subcategories?.categories?.name ?? "")}
+                            · ${escapeHTML(service.subcategories?.name ?? "")}
+                            <br>${escapeHTML(service.city ?? "")}
+                            (${escapeHTML(service.country ?? "")})
+                            ${isMine ? "· My service" : ""}
+                            ${isInactive ? "· <strong>Inactive</strong>" : ""}
+                        </div>
+                        <p style="margin:10px 0 0 0;">
+                            ${escapeHTML(service.description ?? "")}
+                        </p>
                     </div>
-                    <p style="margin:10px 0 0 0;">
-                        ${escapeHTML(service.description ?? "")}
-                    </p>
                 </div>
                 <div style="min-width:110px; text-align:right;">
                     ${!isInactive ? `
-                        <button class="favBtn"
-                                data-service-id="${service.id}"
-                                data-is-fav="${isFav}">
+                        <button class="favBtn" data-service-id="${service.id}" data-is-fav="${isFav}">
                             ${btnLabel}
                         </button>
                     ` : ""}
                     ${isInactive ? `
-                        <button class="activateBtn"
-                                data-service-id="${service.id}">
-                            Activate
-                        </button>
+                        <button class="activateBtn" data-service-id="${service.id}">Activate</button>
                     ` : ""}
                 </div>
             </div>
@@ -289,4 +293,10 @@ export function renderCommentsList(comments, currentUserId) {
     return comments
         .map((c) => renderCommentCard(c, currentUserId))
         .join("");
+}
+
+// ─── Card de Photos ────────────────────────────
+
+export function renderServicePhotosCard(photos) {
+    return renderPhotosCard(photos, "No photos added");
 }
