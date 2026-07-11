@@ -1,5 +1,5 @@
 // ============================================================
-// lib/hooks/general.api.js
+// lib/api/general.api.js
 //
 // Responsabilidade ÚNICA: toda comunicação com o Supabase
 // relacionada à listas, dropdowns, ou qualquer dado generico.

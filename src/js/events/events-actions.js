@@ -7,8 +7,13 @@
 import { requireAuthOrRedirect } from "../guard.js";
 import { signOut } from "../auth.js";
 import { fetchEventById, createEvent, updateEvent } from "../events/events.api.js";
-import { fetchCategories, fetchSubCategories } from "../lib/hooks/general.api.js";
+import { fetchCategories, fetchSubCategories } from "../lib/api/general.api.js";
 import { escapeHTML } from "../utils/string.utils.js";
+
+// Photos
+import { fetchPhotos, addPhotos, deletePhoto, normalizePhotoPositions, MAX_PHOTOS } from "../lib/api/photos.api.js";
+import { renderPhotoThumbnails, renderPhotoUploadControl } from "../ui/photos-render.js";
+import { openLightbox } from "../ui/photo-lightbox.js";
 
 // ─── Elementos da página ──────────────────────────────────────────────────────
 //
@@ -70,10 +75,17 @@ const priceCurrencyInput = document.querySelector("#eventPriceCurrency");
 const isActiveInput = document.querySelector("#eventIsActive");
 const isCancelledInput = document.querySelector("#eventIsCancelled");
 
+// Photos
+const photosSectionEl = document.querySelector("#photosSection");
+
 // ─── Estado local ─────────────────────────────────────────────────────────────
 let userIdState = null;
 let eventIdState = null;
 let isEditModeState = false;
+
+let existingPhotosState = [];   // fotos já salvas no banco (modo edição)
+let newPhotosState = [];        // { tempId, file, previewUrl } — ainda não enviadas
+let deletedPhotoIdsState = [];  // ids de fotos existentes marcadas para exclusão
 
 // ─── Helpers de UI ────────────────────────────────────────────────────────────
 function setMsg(text = "") {
@@ -402,6 +414,42 @@ async function populateForm(event) {
     updatePriceVisibility();
 }
 
+// ─── Photos ───────────────────────────────────────────────────────────────────
+
+function getDisplayPhotos() {
+    const remainingExisting = existingPhotosState
+        .filter((p) => !deletedPhotoIdsState.includes(p.id))
+        .map((p) => ({ id: p.id, url: p.url }));
+
+    const newOnes = newPhotosState.map((p) => ({ id: p.tempId, url: p.previewUrl }));
+
+    return [...remainingExisting, ...newOnes];
+}
+
+function renderPhotosSection() {
+    const displayPhotos = getDisplayPhotos();
+    photosSectionEl.innerHTML = `
+        ${renderPhotoUploadControl(MAX_PHOTOS, displayPhotos.length)}
+        ${renderPhotoThumbnails(displayPhotos, true)}
+    `;
+}
+
+async function applyPhotosDiff(eventId) {
+    for (const photoId of deletedPhotoIdsState) {
+        const photo = existingPhotosState.find((p) => p.id === photoId);
+        if (photo) await deletePhoto(photo);
+    }
+
+    if (deletedPhotoIdsState.length) {
+        await normalizePhotoPositions(eventId, "event"); // evita perder a "capa" (position 0)
+    }
+
+    if (newPhotosState.length) {
+        const files = newPhotosState.map((p) => p.file);
+        await addPhotos(files, eventId, "event");
+    }
+}
+
 // ─── Submit ───────────────────────────────────────────────────────────────────
 form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -414,10 +462,12 @@ form.addEventListener("submit", async (e) => {
 
         if (isEditModeState) {
             await updateEvent(eventIdState, eventData);
+            await applyPhotosDiff(eventIdState);
             setMsg("Event updated successfully.");
             window.location.replace(`/eventDetails.html?id=${eventIdState}`);
         } else {
             const created = await createEvent(eventData);
+            await applyPhotosDiff(created.id);
             setMsg("Event created successfully.");
             window.location.replace(`/eventDetails.html?id=${created.id}`);
         }
@@ -461,6 +511,56 @@ async function init() {
     isRecurringInput.addEventListener("change", updateRecurrenceVisibility);
     isFreeInput.addEventListener("change", updatePriceVisibility);
 
+    // ── Listeners de fotos: abrir seletor / excluir / abrir lightbox ──
+    photosSectionEl.addEventListener("click", (e) => {
+        if (e.target.closest("#photoUploadBtn")) {
+            photosSectionEl.querySelector("#photoFileInput").click();
+            return;
+        }
+
+        const delBtn = e.target.closest(".photoDeleteBtn");
+        if (delBtn) {
+            const key = delBtn.dataset.photoKey;
+            const newIndex = newPhotosState.findIndex((p) => p.tempId === key);
+
+            if (newIndex >= 0) {
+                URL.revokeObjectURL(newPhotosState[newIndex].previewUrl);
+                newPhotosState.splice(newIndex, 1);
+            } else {
+                deletedPhotoIdsState.push(key);
+            }
+
+            renderPhotosSection();
+            return;
+        }
+
+        const img = e.target.closest(".photoThumbImg");
+        if (img) {
+            const displayPhotos = getDisplayPhotos();
+            openLightbox(displayPhotos.map((p) => p.url), Number(img.dataset.lightboxIndex));
+        }
+    });
+
+    // ── Listener de fotos: arquivos selecionados ──────────────
+    photosSectionEl.addEventListener("change", (e) => {
+        const input = e.target.closest("#photoFileInput");
+        if (!input) return;
+
+        const availableSlots = MAX_PHOTOS - getDisplayPhotos().length;
+        const filesToAdd = Array.from(input.files).slice(0, availableSlots);
+
+        for (const file of filesToAdd) {
+            newPhotosState.push({
+                tempId: crypto.randomUUID(),
+                file,
+                previewUrl: URL.createObjectURL(file),
+            });
+        }
+
+        input.value = "";
+        renderPhotosSection();
+    });
+
     // ── Carrega categorias ───────────────────────────────────
     setMsg("Loading...");
 
@@ -485,6 +585,7 @@ async function init() {
         }
 
         await populateForm(eventData);
+        existingPhotosState = await fetchPhotos(eventIdState, "event");
     } else {
         pageTitle.textContent = "New Event";
 
@@ -494,6 +595,8 @@ async function init() {
         updateRecurrenceVisibility();
         updatePriceVisibility();
     }
+
+    renderPhotosSection(); // vazio na criação, populado na edição
 
     setMsg("");
 }

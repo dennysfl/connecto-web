@@ -12,6 +12,7 @@
 // ============================================================
 
 import { supabase } from "../supabaseClient.js";
+import { fetchCoverPhotos } from "../lib/api/photos.api.js";
 
 // ─── HELPERS INTERNOS ─────────────────────────────────────────────────────────
 
@@ -90,11 +91,16 @@ export async function fetchEvents(filters = {}, orders = {}, range = {}) {
     if (events?.length > 0) {
         const eventIds = events.map((e) => e.id);
 
-        const { data: summaries, error: summaryError } = await supabase
-            .from("events_summary")
-            .select("id, avg_rating, rating_count, comment_count")
-            .in("id", eventIds);
+        // ⭐ NOVO — busca summary e cover photos em paralelo
+        const [summaryResult, coverPhotosMap] = await Promise.all([
+            supabase
+                .from("events_summary")
+                .select("id, avg_rating, rating_count, comment_count")
+                .in("id", eventIds),
+            fetchCoverPhotos(eventIds, "event"),
+        ]);
 
+        const { data: summaries, error: summaryError } = summaryResult;
         if (summaryError) throw summaryError;
 
         const data = events.map((e) => {
@@ -104,6 +110,7 @@ export async function fetchEvents(filters = {}, orders = {}, range = {}) {
                 avg_rating: summary?.avg_rating ?? 0,
                 rating_count: summary?.rating_count ?? 0,
                 comment_count: summary?.comment_count ?? 0,
+                coverPhotoUrl: coverPhotosMap.get(e.id) ?? null, // ⭐ NOVO
             };
         });
 

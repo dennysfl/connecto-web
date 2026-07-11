@@ -8,9 +8,11 @@
 import { requireAuthOrRedirect } from "../guard.js";
 import { signOut } from "../auth.js";
 import { fetchEventById, deleteEvent } from "./events.api.js";
-import { fetchComments, createComment, deleteComment } from "../lib/hooks/comments.api.js";
-import { fetchMyRating, fetchRatingSummary, saveRating } from "../lib/hooks/ratings.api.js";
-import { renderEventDetails, renderCommentsList, renderRatingSection } from "./events-render.js";
+import { fetchComments, createComment, deleteComment } from "../lib/api/comments.api.js";
+import { fetchMyRating, fetchRatingSummary, saveRating } from "../lib/api/ratings.api.js";
+import { renderEventDetails, renderCommentsList, renderRatingSection, renderEventPhotosCard } from "./events-render.js";
+import { fetchPhotos } from "../lib/api/photos.api.js";
+import { openLightbox } from "../ui/photo-lightbox.js";
 
 // ─── Elementos da página ─────────────────────────────────────
 const msg = document.querySelector("#msg");
@@ -21,6 +23,7 @@ const commentsEl = document.querySelector("#comments");
 const ratingEl = document.querySelector("#ratingSection");
 const logoutLink = document.querySelector("#logoutLink");
 const entityType = "event";
+const photosEl = document.querySelector("#photosSection");
 
 // ─── Estado local ─────────────────────────────────────────────
 let userIdState = null;
@@ -29,6 +32,7 @@ let eventState = null;
 let isCommentFormOpenState = false;
 let currentRatingState = 0;
 let hoverRatingState = 0;
+let photosState = [];
 
 // ─── Helpers ─────────────────────────────────────────────────
 function setMsg(text = "") { msg.textContent = text; }
@@ -246,6 +250,14 @@ async function init() {
         }
     });
 
+    // ── Eventos de photos ──────────────────────────────────────
+    photosEl.addEventListener("click", (e) => {
+        const img = e.target.closest(".photoThumbImg");
+        if (!img) return;
+        const index = Number(img.dataset.lightboxIndex);
+        openLightbox(photosState.map((p) => p.url), index);
+    });
+
     // ── Carregamento inicial ───────────────────────────────────
     setMsg("Loading...");
 
@@ -257,10 +269,15 @@ async function init() {
         renderCommentForm(eventState, userIdState, isCommentFormOpenState);
         await reloadComments();
 
-        const [myRating, summary] = await Promise.all([
+        const [myRating, summary, photos] = await Promise.all([
             fetchMyRating(eventIdState, entityType, userIdState),
             fetchRatingSummary(eventIdState, entityType),
+            fetchPhotos(eventIdState, entityType),
         ]);
+
+        photosState = photos;
+        photosEl.innerHTML = renderEventPhotosCard(photosState);
+
         currentRatingState = myRating;
         ratingEl.innerHTML = renderRatingSection(
             summary,

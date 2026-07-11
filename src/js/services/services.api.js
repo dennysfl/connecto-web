@@ -12,6 +12,7 @@
 // ============================================================
 
 import { supabase } from "../supabaseClient.js";
+import { fetchCoverPhotos } from "../lib/api/photos.api.js";
 
 // ─── HELPERS INTERNOS ────────────────────────────────────────
 
@@ -88,8 +89,6 @@ function applyFilters(q, filters = {}) {
  *   Retorna `count` (não `total`) para o hook usePagination receber corretamente.
  */
 export async function fetchServices(filters = {}, orders = {}, range = {}) {
-
-    // ── 1. Query principal ────────────────────────────────────
     let q = supabase
         .from("services")
         .select(
@@ -111,25 +110,29 @@ export async function fetchServices(filters = {}, orders = {}, range = {}) {
     const { data: services, count, error } = await q;
     if (error) throw error;
 
-    // ── 2. Busca summary (ratings + comments) via view ───────
     if (services?.length > 0) {
-        const serviceIds = services.map(s => s.id);
+        const serviceIds = services.map((s) => s.id);
 
-        const { data: summaries, error: summaryError } = await supabase
-            .from("services_summary")
-            .select("id, avg_rating, rating_count, comment_count")
-            .in("id", serviceIds);
+        // ⭐ NOVO — busca summary e cover photos em paralelo
+        const [summaryResult, coverPhotosMap] = await Promise.all([
+            supabase
+                .from("services_summary")
+                .select("id, avg_rating, rating_count, comment_count")
+                .in("id", serviceIds),
+            fetchCoverPhotos(serviceIds, "service"),
+        ]);
 
+        const { data: summaries, error: summaryError } = summaryResult;
         if (summaryError) throw summaryError;
 
-        // ── 3. Merge ──────────────────────────────────────────
-        const data = services.map(s => {
-            const summary = summaries?.find(r => r.id === s.id);
+        const data = services.map((s) => {
+            const summary = summaries?.find((r) => r.id === s.id);
             return {
                 ...s,
                 avg_rating: summary?.avg_rating ?? 0,
                 rating_count: summary?.rating_count ?? 0,
                 comment_count: summary?.comment_count ?? 0,
+                coverPhotoUrl: coverPhotosMap.get(s.id) ?? null, // ⭐ NOVO
             };
         });
 

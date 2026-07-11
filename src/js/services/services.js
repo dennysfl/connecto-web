@@ -21,8 +21,8 @@ import {
     fetchFavorites,
     addFavorite,
     removeFavorite
-} from "../lib/hooks/favorites.api.js";
-import { fetchCategories, fetchSubCategories } from "../lib/hooks/general.api.js";
+} from "../lib/api/favorites.api.js";
+import { fetchCategories, fetchSubCategories } from "../lib/api/general.api.js";
 import { escapeHTML } from "../utils/string.utils.js";
 import { renderServiceCard } from "./services-render.js";  // ← NOVO
 
