@@ -5,7 +5,7 @@ body {
 }
 
 .container {
-    max-width: 420px;
+    max-width: 450px;
     margin: 0 auto;
 }
 
@@ -36,4 +36,30 @@ button {
 .msg {
     margin-top: 10px;
     color: #b00020;
+}
+
+/* Container que rola na horizontal */
+.horizontalCard {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    padding: 8px 0 12px 0;
+}
+
+/* Cada item dentro do scroll */
+.horizontalCard .item {
+    flex: 0 0 auto;
+    width: 160px;
+    scroll-snap-align: start;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 10px;
+    text-decoration: none;
+    color: inherit;
+}
+
+.muted {
+    color: #888;
+    font-size: 0.9em;
 }

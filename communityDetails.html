@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Connecto - Dashboard</title>
+    <link rel="stylesheet" href="./src/css/styles.css" />
+</head>
+
+<body>
+
+    <main class="container">
+        <h1 id="communityName">Connecto</h1>
+        <p>Welcome, <strong id="fullName"></strong>
+            <font size=2.2>(<i id="userName"></i>)</font>
+        </p>
+
+        <a href="#" id="logoutLink">Logout</a><br><br>
+
+        <div id="communityDescription" class="card"></div>
+
+        <p><a href="/services.html">Services</a> |
+            <a href="/events.html">Events</a> |
+            <a href="/news.html">News </a> |
+            <a href="/tips.html">Tips</a>
+            </a>
+        </p>
+
+        <br><b>Services</b>
+        <div id="communityServices" class="card"></div>
+
+        <br><b>Events</b>
+        <div id="communityEvents" class="card"></div>
+
+        <br><b>News</b>
+        <div id="communityNews" class="card"></div>
+
+        <p id="msg" class="msg"></p>
+
+    </main>
+
+    <script type="module" src="./src/js/communities/communities.js"></script>
+</body>
+
+</html>

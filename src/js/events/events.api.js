@@ -70,7 +70,7 @@ export async function fetchEvents(filters = {}, orders = {}, range = {}) {
     let q = supabase
         .from("events")
         .select(
-            "id, title, description, subcategories!inner (name, categories!inner (name)), venue_name, city, country, event_type, starts_at, is_free, price_amount, price_currency, is_active, is_cancelled,  owner_id, created_at",
+            "id, title, description, subcategories!inner (name, categories!inner (name)), venue_name, countries ( name, iso_code ), cities ( name ), event_type, starts_at, is_free, price_amount, currencies (iso_code, symbol), is_active, is_cancelled,  owner_id, created_at",
             { count: "exact" }
         );
 
@@ -139,8 +139,8 @@ export async function fetchEventById(eventId) {
             event_type,
             venue_name,
             address,
-            city,
-            country,
+            countries ( name, iso_code ), 
+            cities ( name ),
             online_url,
             starts_at,
             ends_at,
@@ -151,7 +151,7 @@ export async function fetchEventById(eventId) {
             max_capacity,
             is_free,
             price_amount,
-            price_currency,
+            currencies (iso_code, symbol),
             is_active,
             is_cancelled,
             created_at,

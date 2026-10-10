@@ -13,7 +13,7 @@ form.addEventListener("submit", async (e) => {
 
     try {
         await signIn(email, password);
-        window.location.href = "/dashboard.html";
+        window.location.href = "/home.html";
     } catch (err) {
         msg.textContent = err?.message ?? "Login failed";
         console.error(err);
@@ -35,7 +35,7 @@ formNew.addEventListener("submit", async (e) => {
         await signUp(newEmail, newPassword, fullName);
 
         if (data?.session) {
-            window.location.href = "/dashboard.html";
+            window.location.href = "/home.html";
             return;
         }
 
@@ -92,7 +92,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (sessionData.session) {
                 clearInterval(timer);
                 popup?.close();
-                window.location.href = "/dashboard.html";
+                window.location.href = "/home.html";
             }
         }, 500);
     });

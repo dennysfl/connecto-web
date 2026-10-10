@@ -92,7 +92,13 @@ export async function fetchServices(filters = {}, orders = {}, range = {}) {
     let q = supabase
         .from("services")
         .select(
-            "id, title, description, subcategories!inner (name, categories!inner (name)), city, country, is_active, owner_id, created_at",
+            `
+            id, title, description, price, is_active, owner_id, created_at,
+            subcategories!inner ( name, categories!inner ( name ) ),
+            countries ( name, iso_code ),
+            cities ( name )
+            providers (name, communities ( currencies ( iso_code, symbol)))
+        `,
             { count: "exact" }
         );
 
@@ -158,10 +164,11 @@ export async function fetchServiceById(serviceId) {
             title,
             description,
             subcategory_id,
-            city,
-            country,
+            countries ( name, iso_code ),
+            cities ( name ),
             is_active,
             created_at,
+            providers (name, communities ( currencies ( iso_code, symbol))),
             subcategories!inner (
                 id,
                 name,

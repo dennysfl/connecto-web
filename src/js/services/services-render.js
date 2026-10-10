@@ -135,8 +135,8 @@ export function renderServiceCard(service, isFav, isMine, isInactive) {
                         <div class="muted">
                             ${escapeHTML(service.subcategories?.categories?.name ?? "")}
                             · ${escapeHTML(service.subcategories?.name ?? "")}
-                            <br>${escapeHTML(service.city ?? "")}
-                            (${escapeHTML(service.country ?? "")})
+                            <br>${escapeHTML(service.cities?.name ?? "")}
+                            (${escapeHTML(service.countries?.iso_code ?? "")})
                             ${isMine ? "· My service" : ""}
                             ${isInactive ? "· <strong>Inactive</strong>" : ""}
                         </div>
@@ -161,7 +161,6 @@ export function renderServiceCard(service, isFav, isMine, isInactive) {
 }
 
 // ─── Card de detalhes do serviço ──────────────────────────────
-
 /**
  * Gera o HTML do bloco de detalhes de um serviço (serviceDetails.html).
  *
@@ -183,8 +182,8 @@ export function renderServiceDetails(service, currentUserId) {
         <div class="muted">
             ${escapeHTML(service.subcategories?.categories?.name ?? "")}
             · ${escapeHTML(service.subcategories?.name ?? "")}
-            <br>${escapeHTML(service.city ?? "")}
-            (${escapeHTML(service.country ?? "")})
+            <br>${escapeHTML(service.cities?.name ?? "")}
+            (${escapeHTML(service.countries?.iso_code ?? "")})
         </div>
 
         <p style="margin-top:12px;">${escapeHTML(service.description ?? "")}</p>

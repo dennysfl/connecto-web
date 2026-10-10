@@ -140,7 +140,7 @@ export function renderEventCard(event, isFav, isMine, isInactive) {
                             · ${escapeHTML(event.subcategories?.name ?? "")}
                             <br>
                             ${!isOnline
-            ? `${escapeHTML(event.venue_name ?? "")} - ${escapeHTML(event.city ?? "")} (${escapeHTML(event.country ?? "")})`
+            ? `${escapeHTML(event.venue_name ?? "")} - ${escapeHTML(event.cities?.name ?? "")} (${escapeHTML(event.countries?.iso_code ?? "")})`
             : "Online"
         }
                             ${isMine ? "· My event" : ""}
@@ -194,8 +194,8 @@ export function renderEventDetails(event, currentUserId) {
         <div class="muted">
             ${escapeHTML(event.subcategories?.categories?.name ?? "")}
             · ${escapeHTML(event.subcategories?.name ?? "")}
-            <br>${escapeHTML(event.city ?? "")}
-            (${escapeHTML(event.country ?? "")})
+            <br>${escapeHTML(event.cities?.name ?? "")}
+            (${escapeHTML(event.countries?.iso_code ?? "")})
         </div>
 
         <p style="margin-top:12px;">${escapeHTML(event.description ?? "")}</p>
