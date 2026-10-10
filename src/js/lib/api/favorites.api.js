@@ -13,6 +13,7 @@
 
 import { supabase } from "../../supabaseClient.js";
 
+// ─── Serviços e Eventos ──────────────────────────────────────────
 /**
  * Busca todos os favoritos de um usuário.
  * Retorna um Set de IDs para facilitar a checagem (favoriteSet.has(id)).
@@ -47,7 +48,7 @@ export async function addFavorite(userId, entityID, entityType) {
     if (error) throw error;
 }
 
-/**
+/*
  * Remove um serviço dos favoritos do usuário.
  *
  * @param {string} userId
@@ -63,4 +64,52 @@ export async function removeFavorite(userId, entityID, entityType) {
         .eq("entity_type", entityType);
 
     if (error) throw error;
+}
+
+// ─── Comunidades ──────────────────────────────────────────
+/**
+ * Busca todos as comunidades favoritas de um usuário.
+ * Retorna um Set de IDs para facilitar a checagem (favoriteSet.has(id)).
+ *
+ * @param {string} userId
+ * @returns {Set<string>}
+ */
+export async function fetchFavoritesCommunity(userId) {
+    const { data, error } = await supabase
+        .from("user_communities")
+        .select("community_id")
+        .eq("profile_id", userId)
+        .eq("is_primary", true);
+
+    if (error) throw error;
+    return new Set((data ?? []).map((row) => row.community_id));
+}
+
+/**
+ * Define uma comunidade como a "primary" (favorita) do usuário,
+ * removendo automaticamente o status de qualquer outra comunidade
+ * que fosse primary antes.
+ *
+ * Regra de negócio: cada usuário tem NO MÁXIMO 1 comunidade primary.
+ *
+ * @param {string} userId
+ * @param {string} communityID - comunidade que vai virar a nova favorita
+ */
+export async function setPrimaryCommunity(userId, communityID) {
+    // 1º passo: zera is_primary de TODAS as comunidades do usuário
+    const { error: clearError } = await supabase
+        .from("user_communities")
+        .update({ is_primary: false })
+        .eq("profile_id", userId);
+
+    if (clearError) throw clearError;
+
+    // 2º passo: marca a comunidade escolhida como primary
+    const { error: setError } = await supabase
+        .from("user_communities")
+        .update({ is_primary: true })
+        .eq("profile_id", userId)
+        .eq("community_id", communityID);
+
+    if (setError) throw setError;
 }

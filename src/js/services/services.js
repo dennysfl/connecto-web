@@ -157,7 +157,6 @@ function renderFilteredView() {
 }
 
 // ─── SessionStorage: salvar e restaurar estado ────────────────
-
 function saveListingState() {
     const state = {
         searchText: filterText.value,
@@ -201,7 +200,6 @@ async function applyRestoredFilters(state) {
 }
 
 // ─── Lógica principal de Load More ───────────────────────────
-
 function getCurrentFilters() {
     return {
         category: categorySel.value || "",
